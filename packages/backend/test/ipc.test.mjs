@@ -23,7 +23,7 @@ test('preload permits exactly the v1 API and routes it to real storage', async (
   });
   try {
     assert.equal(api.apiVersion,'1.0.0');
-    assert.deepEqual(Object.keys(api).sort(),['apiVersion','settings','tasks']);
+    assert.deepEqual(Object.keys(api).sort(),['apiVersion','assistant','settings','tasks']);
     assert.deepEqual(Object.keys(api.tasks).sort(),['create','list','update']);
     assert.deepEqual(Object.keys(api.settings).sort(),['get','update']);
     assert.equal(channels.size,5);
@@ -35,6 +35,30 @@ test('preload permits exactly the v1 API and routes it to real storage', async (
     assert.equal((await api.settings.update({expectedRevision:1,patch:{locale:'zh-CN'}})).data.locale,'zh-CN');
   } finally {dispose();store.close();}
   assert.equal(channels.size,0);
+});
+
+test('assistant IPC uses the same sender restrictions and structured clone boundary', async () => {
+  const channels=new Map(), url='file:///app/index.html', frame={url}, contents={mainFrame:frame};
+  const calls=[];
+  const assistant={getConfig:async()=>({ok:true,data:{provider:'deepseek',model:'deepseek-flash',hasKey:false}}),
+    configure:async input=>{calls.push(input);return {ok:true,data:{hasKey:true}};},
+    submit:async()=>({ok:false,error:{code:'AI_NOT_CONFIGURED'}}),undo:async()=>({ok:false,error:{code:'NOT_FOUND'}})};
+  const dispose=registerIpc({handle:(k,v)=>channels.set(k,v),removeHandler:k=>channels.delete(k)},()=>({ok:true}),()=>contents,url,assistant);
+  let api;
+  vm.runInNewContext(readFileSync(new URL('../../../apps/desktop/main/preload.cjs',import.meta.url),'utf8'),{
+    require:()=>({contextBridge:{exposeInMainWorld:(_key,value)=>{api=value;}},ipcRenderer:{invoke:async(channel,params)=>structuredClone(await channels.get(channel)({sender:contents,senderFrame:frame},structuredClone(params)))}})
+  });
+  assert.equal(api.assistant.apiVersion,'1.0.0');
+  assert.deepEqual(Object.keys(api.assistant).sort(),['apiVersion','configure','getConfig','submit','undo']);
+  assert.equal((await api.assistant.getConfig()).data.hasKey,false);
+  const input={apiKey:'test-only'};await api.assistant.configure(input);input.apiKey='changed';assert.equal(calls[0].apiKey,'test-only');
+  assert.equal((await api.assistant.submit({text:'Hello'})).error.code,'AI_NOT_CONFIGURED');
+  assert.equal((await api.assistant.undo({requestId:'missing'})).error.code,'NOT_FOUND');
+  for(const channel of ['getConfig','configure','submit','undo']) {
+    for(const event of [{},{sender:contents,senderFrame:{url}},{sender:{},senderFrame:frame}])
+      assert.equal((await channels.get('reminder:assistant:'+channel)(event,{})).error.code,'FORBIDDEN');
+  }
+  dispose();assert.equal(channels.size,0);
 });
 
 test('foreign frame, foreign window, navigation and missing sender cannot access storage', () => {
