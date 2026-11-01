@@ -7,7 +7,7 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 process.exitCode = await withIsolatedProfile(async profile => {
   const env = { ...process.env, REMINDER_USER_DATA_DIR: profile };
   // Verify real main configuration before the UI test performs any writes.
-  for (const script of ['tools/profile-probe.mjs', 'tools/assistant-probe.mjs', 'apps/desktop/renderer/e2e/desktop.mjs']) {
+  for (const script of ['tools/profile-probe.mjs', 'tools/assistant-probe.mjs', 'apps/desktop/renderer/e2e/desktop.mjs', 'tools/assistant-ui-probe.mjs']) {
     const child = spawnSync(process.execPath, [join(root, script)], {
       cwd: root, env, stdio: 'inherit', windowsHide: true, timeout: 180_000
     });
