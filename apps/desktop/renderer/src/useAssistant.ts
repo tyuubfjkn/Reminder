@@ -10,8 +10,11 @@ export type Entry =
   | { kind: 'user'; key: string; text: string }
   | { kind: 'reply'; key: string; reply: AssistantReply; undo: UndoState };
 
-/** A request that is in flight or failed; a retry resends exactly this input (same requestId). */
-export interface PendingRequest { input: AssistantInput; phase: 'sending' | 'failed' }
+/**
+ * A request that is in flight or failed; a retry resends exactly this input (same requestId). `submittedDraft` is
+ * the raw composer text a typed message came from (absent for structured answers), kept so any retry can clear it.
+ */
+export interface PendingRequest { input: AssistantInput; phase: 'sending' | 'failed'; submittedDraft?: string }
 
 export interface AssistantNotice {
   key: MessageKey;
@@ -63,16 +66,19 @@ export function useAssistant(assistant: AssistantApi | null, reloadTasks: () => 
     if (!(await reloadTasks())) setNotice({ key: 'assistant.reloadFailed', action: 'reloadTasks' });
   }, [reloadTasks]);
 
-  /** `submittedDraft` is the raw composer text this request came from; it is cleared only if still unchanged. */
+  /**
+   * `submittedDraft` is the raw composer text this request came from. On success the composer is cleared only if
+   * it still holds the same request (whitespace aside), so newer text typed meanwhile is kept.
+   */
   const run = useCallback(async (input: AssistantInput, userText: string, submittedDraft?: string): Promise<boolean> => {
     if (!assistant || inFlight.current) return false;
     inFlight.current = true;
-    setPending({ input, phase: 'sending' });
+    setPending({ input, phase: 'sending', submittedDraft });
     setNotice(null);
     const result = await call(() => assistant.submit(input));
     inFlight.current = false;
     if (!result.ok) {
-      setPending({ input, phase: 'failed' });
+      setPending({ input, phase: 'failed', submittedDraft });
       setNotice(result.error.code === 'AI_CONVERSATION_EXPIRED'
         ? { key: assistantErrorKey(result.error), action: 'newConversation' }
         : { key: assistantErrorKey(result.error), action: 'retry' });
@@ -87,7 +93,7 @@ export function useAssistant(assistant: AssistantApi | null, reloadTasks: () => 
       { kind: 'reply', key: `${input.requestId}:reply`, reply: data,
         undo: data.outcome === 'applied' && data.undoAvailable ? 'available' : 'unavailable' }
     ]);
-    if (submittedDraft !== undefined) setDraft(d => (d === submittedDraft ? '' : d));
+    if (submittedDraft !== undefined) setDraft(d => (d.trim() === submittedDraft.trim() ? '' : d));
     if (data.outcome === 'applied' || data.outcome === 'undone') await afterCommit();
     return true;
   }, [assistant, afterCommit]);
@@ -118,7 +124,7 @@ export function useAssistant(assistant: AssistantApi | null, reloadTasks: () => 
     return run({ requestId: crypto.randomUUID(), text, ...(conversationId ? { conversationId } : {}), choice }, text);
   }, [pending, conversationId, run]);
 
-  const retry = useCallback(() => (pending ? run(pending.input, pending.input.text) : Promise.resolve(false)), [pending, run]);
+  const retry = useCallback(() => (pending ? run(pending.input, pending.input.text, pending.submittedDraft) : Promise.resolve(false)), [pending, run]);
 
   const newConversation = useCallback(() => {
     setEntries([]);
