@@ -104,6 +104,19 @@ export function createFakeApi(initial: { settings?: Partial<Settings>; tasks?: T
       const current = tasks.find(t => t.id === id)!;
       return apply(current, patch);
     },
+    /** Simulate a task created elsewhere (for example by the assistant service). */
+    externalCreate(title: string): Task {
+      const at = now();
+      const task: Task = {
+        id: `00000000-0000-4000-8000-${String(++seq).padStart(12, '0')}`, title, notes: '', status: 'pending',
+        completedAt: null, priority: 'normal', estimatedMinutes: null, deadline: null, createdAt: at, updatedAt: at, revision: 1
+      };
+      tasks = [...tasks, task];
+      return task;
+    },
+    externalRemove(id: string) {
+      tasks = tasks.filter(t => t.id !== id);
+    },
     externalSettings(patch: Partial<Omit<Settings, 'revision'>>) {
       settings = { ...settings, ...patch, revision: settings.revision + 1 };
     },

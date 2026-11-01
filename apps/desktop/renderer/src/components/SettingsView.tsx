@@ -1,4 +1,4 @@
-import { useId, useMemo } from 'react';
+import { useId, useMemo, type ReactNode } from 'react';
 import type { Locale, Settings, UpdateSettings } from '../api/contract';
 import { useI18n } from '../i18n/context';
 import { translate } from '../i18n/messages';
@@ -7,6 +7,8 @@ interface Props {
   settings: Settings;
   busy: boolean;
   onChange: (patch: UpdateSettings['patch']) => void;
+  /** Extra settings sections, such as the optional AI assistant. */
+  children?: ReactNode;
 }
 
 const locales: Locale[] = ['en-US', 'zh-CN'];
@@ -17,7 +19,7 @@ function timeZones(current: string): string[] {
   return [...new Set(['UTC', current, ...zones])];
 }
 
-export function SettingsView({ settings, busy, onChange }: Props) {
+export function SettingsView({ settings, busy, onChange, children }: Props) {
   const { t } = useI18n();
   const id = useId();
   const zones = useMemo(() => timeZones(settings.timeZone), [settings.timeZone]);
@@ -43,6 +45,7 @@ export function SettingsView({ settings, busy, onChange }: Props) {
         <p className="hint" id={`${id}-zone-hint`}>{t('settings.timeZoneHint')}</p>
       </div>
       {busy && <p className="hint" aria-live="polite">{t('settings.saving')}</p>}
+      {children}
     </section>
   );
 }
