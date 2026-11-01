@@ -16,9 +16,7 @@ jobs:
         with:
           node-version: '24.16.0'
       - name: Install pinned desktop runtime
-        run: npm install --registry=https://registry.npmjs.org
-      - name: Capture generated lock for maintainer adoption
-        run: node -e "console.log('ROOT_LOCK_BASE64='+require('node:fs').readFileSync('package-lock.json').toString('base64'))"
+        run: npm ci --registry=https://registry.npmjs.org
       - name: Backend tests
         run: npm test
       - name: Real Windows storage failures
