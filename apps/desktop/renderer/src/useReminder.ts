@@ -11,6 +11,8 @@ export interface Notice {
   key: MessageKey;
   vars?: Record<string, string>;
   undo?: UndoEntry;
+  /** Offers an explicit retry that reloads the latest saved settings. */
+  retry?: 'settings';
 }
 
 export function useReminder(api: ReminderApi | null) {
@@ -110,6 +112,25 @@ export function useReminder(api: ReminderApi | null) {
     }
   }, [api, refreshTasks]);
 
+  /** After a settings CONFLICT: adopt the latest saved settings, or say plainly that they could not be loaded. */
+  const reloadAfterConflict = useCallback(async () => {
+    const latest = await call(() => api!.settings.get());
+    if (latest.ok) {
+      setSettings(latest.data);
+      setNotice({ tone: 'error', key: 'conflict.settings' });
+    } else {
+      // Last known settings stay as they are; the user retries explicitly.
+      setNotice({ tone: 'error', key: 'conflict.settingsRefreshFailed', retry: 'settings' });
+    }
+  }, [api]);
+
+  const retrySettingsReload = useCallback(async () => {
+    if (settingsBusy) return;
+    setSettingsBusy(true);
+    await reloadAfterConflict();
+    setSettingsBusy(false);
+  }, [reloadAfterConflict, settingsBusy]);
+
   const updateSettings = useCallback(async (patch: UpdateSettings['patch']) => {
     if (!settings || settingsBusy) return;
     setSettingsBusy(true);
@@ -118,18 +139,16 @@ export function useReminder(api: ReminderApi | null) {
       setSettings(result.data);
       setNotice({ tone: 'success', key: 'settings.saved' });
     } else if (result.error.code === 'CONFLICT') {
-      const latest = await call(() => api!.settings.get());
-      if (latest.ok) setSettings(latest.data);
-      fail(result, 'conflict.settings');
+      await reloadAfterConflict();
     } else {
       fail(result);
     }
     setSettingsBusy(false);
-  }, [api, settings, settingsBusy]);
+  }, [api, settings, settingsBusy, reloadAfterConflict]);
 
   return {
     phase, settings, tasks, notice, busyIds, settingsBusy,
-    load, createTask, updateTask, undo, updateSettings,
+    load, createTask, updateTask, undo, updateSettings, retrySettingsReload,
     dismissNotice: () => setNotice(null)
   };
 }

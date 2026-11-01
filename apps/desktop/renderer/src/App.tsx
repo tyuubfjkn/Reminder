@@ -100,7 +100,8 @@ function Ready({ state }: { state: ReturnType<typeof useReminder> }) {
         </nav>
       </header>
 
-      <NoticeBar notice={state.notice} onUndo={state.undo} onDismiss={state.dismissNotice} busyIds={state.busyIds} />
+      <NoticeBar notice={state.notice} onUndo={state.undo} onRetrySettings={() => void state.retrySettingsReload()}
+        retryBusy={state.settingsBusy} onDismiss={state.dismissNotice} busyIds={state.busyIds} />
 
       <main className="content">
         {view === 'settings' ? (
@@ -140,8 +141,9 @@ function ListSection({ title, count, children }: { title: string; count: number;
   );
 }
 
-function NoticeBar({ notice, onUndo, onDismiss, busyIds }: {
-  notice: Notice | null; onUndo: (entry: UndoEntry) => void; onDismiss: () => void; busyIds: ReadonlySet<string>;
+function NoticeBar({ notice, onUndo, onRetrySettings, retryBusy, onDismiss, busyIds }: {
+  notice: Notice | null; onUndo: (entry: UndoEntry) => void; onRetrySettings: () => void; retryBusy: boolean;
+  onDismiss: () => void; busyIds: ReadonlySet<string>;
 }) {
   const { t } = useI18n();
   const success = notice?.tone === 'success' ? notice : null;
@@ -167,6 +169,9 @@ function NoticeBar({ notice, onUndo, onDismiss, busyIds }: {
             <button type="button" onClick={() => onUndo(error.undo!)} disabled={busyIds.has(error.undo.taskId)}>
               {t('action.undo')}
             </button>
+          )}
+          {error.retry === 'settings' && (
+            <button type="button" onClick={onRetrySettings} disabled={retryBusy}>{t('action.retry')}</button>
           )}
           <button type="button" className="ghost" onClick={onDismiss}>{t('action.dismiss')}</button>
         </div>

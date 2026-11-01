@@ -70,6 +70,15 @@ Screenshots from that run are in `docs/evidence/` (`01`–`13`). They show real 
 Not exercised against the real backend: rejected IPC or `STORAGE_ERROR` (only covered by the fake API), a real second window, and
 an actual Chinese-language Windows install (simulated with Chromium `--lang`). No installer or notification claims.
 
+### REM-001-FE-01: settings conflict with a failed reload
+If `settings.update` returns `CONFLICT` and the follow-up `settings.get` also fails (a `STORAGE_ERROR` result or a rejected IPC
+promise), the app no longer says the latest settings are shown. It keeps the last known settings on screen and shows a
+localized error with a **Try again** button that reloads the latest saved settings. Choosing the setting again also stays
+revision-checked. A successful reload behaves as before.
+Mock-only evidence (fixture failure injection): 6 regression tests, en-US and zh-CN × {`STORAGE_ERROR` result, rejected
+promise, retry by choosing again}, seen failing before the fix (the old copy claimed "The latest saved settings are shown") and
+passing after it. The real backend can't be made to fail `settings.get` on demand, so this path has no real-Electron evidence.
+
 ## Known limitations
 - Native `<input type="date|time">` pickers display in Chromium's OS or `--lang` format (for example `06/11/2026`), not the
   app's language. The saved value is always ISO `YYYY-MM-DD`. A custom localized date picker could be a later UI task.

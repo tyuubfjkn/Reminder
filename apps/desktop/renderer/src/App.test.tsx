@@ -334,6 +334,82 @@ describe('settings', () => {
     expect(fake.settings.locale).toBe('en-US');
   });
 
+  // REM-001-FE-01: a settings CONFLICT whose reload also fails.
+  const refreshFailures = [
+    ['a STORAGE_ERROR result', { ok: false, error: { code: 'STORAGE_ERROR' } }],
+    ['a rejected IPC promise', 'reject']
+  ] as const;
+  const copy = {
+    'en-US': {
+      settings: 'Settings', tasksHeading: 'No tasks yet', language: 'Language', zone: 'Time zone', retry: 'Try again',
+      failed: 'Settings changed somewhere else, and the latest settings couldn’t be loaded.',
+      kept: 'Your previous settings are still shown',
+      reloaded: 'Settings changed somewhere else. The latest saved settings are shown', saved: 'Settings saved.'
+    },
+    'zh-CN': {
+      settings: '设置', tasksHeading: '还没有任务', language: '语言', zone: '时区', retry: '重试',
+      failed: '设置已在其他地方被修改，且无法载入最新设置。',
+      kept: '仍显示你之前的设置',
+      reloaded: '设置已在其他地方被修改。已显示最新保存的设置', saved: '设置已保存。'
+    }
+  } as const;
+
+  describe.each(['en-US', 'zh-CN'] as const)('settings conflict with a failed reload (%s)', locale => {
+    const c = copy[locale];
+    const other = locale === 'en-US' ? 'zh-CN' : 'en-US';
+
+    it.each(refreshFailures)('explains the failure, keeps the last known settings and allows an explicit retry after %s', async (_label, failure) => {
+      const fake = createFakeApi({ settings: { locale, timeZone: 'Europe/London' } });
+      const { user } = setup(fake);
+      await screen.findByRole('heading', { name: c.tasksHeading });
+      await user.click(screen.getByRole('button', { name: c.settings }));
+      fake.externalSettings({ timeZone: 'Asia/Tokyo' });
+      fake.inject('settings.get', failure);
+
+      await user.selectOptions(screen.getByRole('combobox', { name: c.language }), other);
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(c.failed);
+      expect(alert).toHaveTextContent(c.kept);
+      expect(alert).not.toHaveTextContent(c.reloaded);
+      expect(screen.getByRole('status')).not.toHaveTextContent(c.saved);
+      // Last known settings stay on screen; nothing was written over the newer saved settings.
+      expect(screen.getByRole('combobox', { name: c.language })).toHaveValue(locale);
+      expect(screen.getByRole('combobox', { name: c.zone })).toHaveValue('Europe/London');
+      expect(document.documentElement.lang).toBe(locale);
+      expect(fake.settings).toMatchObject({ locale, timeZone: 'Asia/Tokyo', revision: 2 });
+      expect(screen.getByRole('combobox', { name: c.language })).toBeEnabled();
+
+      // Explicit retry reloads the latest settings.
+      await user.click(within(alert).getByRole('button', { name: c.retry }));
+      expect(await screen.findByRole('alert')).toHaveTextContent(c.reloaded);
+      expect(screen.getByRole('combobox', { name: c.zone })).toHaveValue('Asia/Tokyo');
+      expect(fake.api.settings.get).toHaveBeenCalledTimes(3);
+
+      // A later explicit change uses the reloaded revision and succeeds.
+      await user.selectOptions(screen.getByRole('combobox', { name: c.zone }), 'UTC');
+      await waitFor(() => expect(fake.settings).toMatchObject({ locale, timeZone: 'UTC', revision: 3 }));
+      expect(fake.api.settings.update).toHaveBeenLastCalledWith({ expectedRevision: 2, patch: { timeZone: 'UTC' } });
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.getByRole('status')).toHaveTextContent(c.saved);
+    });
+
+    it('lets the user retry the change itself after a failed reload', async () => {
+      const fake = createFakeApi({ settings: { locale } });
+      const { user } = setup(fake);
+      await screen.findByRole('heading', { name: c.tasksHeading });
+      await user.click(screen.getByRole('button', { name: c.settings }));
+      fake.externalSettings({ timeZone: 'Asia/Tokyo' });
+      fake.inject('settings.get', 'reject');
+      await user.selectOptions(screen.getByRole('combobox', { name: c.language }), other);
+      expect(await screen.findByRole('alert')).toHaveTextContent(c.failed);
+      // Choosing again is still revision-checked: it conflicts, the reload now succeeds, and nothing is overwritten.
+      await user.selectOptions(screen.getByRole('combobox', { name: c.language }), other);
+      expect(await screen.findByText(new RegExp(c.reloaded))).toBeInTheDocument();
+      expect(fake.settings).toMatchObject({ locale, timeZone: 'Asia/Tokyo', revision: 2 });
+    });
+  });
+
   it('shows exact deadlines in the selected time zone and date-only deadlines unshifted', async () => {
     const fake = createFakeApi({ settings: { timeZone: 'Asia/Shanghai' }, tasks: [
       makeTask({ title: 'Exact', deadline: { kind: 'instant', at: '2026-11-06T09:00:00.000Z', timeZone: 'Asia/Shanghai' } }),
