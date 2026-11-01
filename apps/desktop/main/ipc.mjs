@@ -1,7 +1,8 @@
 const methods = ['tasks.list','tasks.create','tasks.update','settings.get','settings.update'];
 
-export function registerIpc(ipcMain, dispatch, getWebContents, allowedUrl) {
-  const channels=methods.map(method => ['reminder:'+method.replace('.',':'),method]);
+export function registerIpc(ipcMain, dispatch, getWebContents, allowedUrl, assistant) {
+  const exposed=assistant?[...methods,...['getConfig','configure','submit','undo'].map(name=>'assistant.'+name)]:methods;
+  const channels=exposed.map(method => ['reminder:'+method.replace('.',':'),method]);
   for (const [channel,method] of channels) {
     ipcMain.handle(channel,(event,params) => {
       const contents=getWebContents();
@@ -9,7 +10,7 @@ export function registerIpc(ipcMain, dispatch, getWebContents, allowedUrl) {
           event.senderFrame!==contents.mainFrame || event.senderFrame.url!==allowedUrl) {
         return {ok:false,error:{code:'FORBIDDEN'}};
       }
-      return dispatch(method,params);
+      return method.startsWith('assistant.') ? assistant[method.slice(10)](params) : dispatch(method,params);
     });
   }
   return () => { for (const [channel] of channels) ipcMain.removeHandler(channel); };

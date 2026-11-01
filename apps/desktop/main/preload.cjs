@@ -1,6 +1,13 @@
 const {contextBridge,ipcRenderer}=require('electron');
 contextBridge.exposeInMainWorld('reminder', {
   apiVersion:'1.0.0',
+  assistant:{
+    apiVersion:'1.0.0',
+    getConfig:()=>ipcRenderer.invoke('reminder:assistant:getConfig'),
+    configure:input=>ipcRenderer.invoke('reminder:assistant:configure',input),
+    submit:input=>ipcRenderer.invoke('reminder:assistant:submit',input),
+    undo:input=>ipcRenderer.invoke('reminder:assistant:undo',input)
+  },
   tasks:{
     list:()=>ipcRenderer.invoke('reminder:tasks:list'),
     create:input=>ipcRenderer.invoke('reminder:tasks:create',input),
