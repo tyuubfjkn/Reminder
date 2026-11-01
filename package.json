@@ -4,6 +4,6 @@
   "private": true,
   "type": "module",
   "engines": { "node": ">=24.16.0 <25" },
-  "scripts": { "test": "node --test packages/backend/test/*.test.mjs", "backend:cli": "node packages/backend/src/cli.mjs", "desktop": "electron apps/desktop/main/main.mjs" },
+  "scripts": { "test": "node --test packages/backend/test/*.test.mjs", "test:desktop": "node tools/run-desktop-e2e.mjs", "backend:cli": "node packages/backend/src/cli.mjs", "desktop": "electron apps/desktop/main/main.mjs" },
   "devDependencies": { "electron": "45.2.1" }
 }
