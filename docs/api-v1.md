@@ -13,6 +13,7 @@ Core/CLI: dispatch(method, params) returns Result synchronously.
 | settings.update(input) | settings.update | UpdateSettings | Settings |
 
 Strict plain objects only; reject unknown fields and empty patches. Missing and null differ. Null clears deadline/estimate; null is invalid for title, notes, priority, status, locale and timezone. Omitted fields on update stay unchanged.
+Title and notes must be well-formed Unicode; reject unpaired UTF-16 surrogates rather than saving replacement characters. Valid emoji and combining sequences remain unchanged.
 No automatic completion or deletion. A status update to completed sets completedAt on transition; reopening clears it. Repeating the same status leaves completedAt intact, but a successful update increments revision.
 List sorted by createdAt then id, ascending. Timestamps are UTC ISO strings. Date-only deadlines use exact YYYY-MM-DD (years 0001..9999), never parsed as a local timestamp.
 Instant deadlines require full YYYY-MM-DDTHH:mm:ss[.SSS](Z|+HH:mm|-HH:mm), valid calendar/time components, numeric offset at most 14:00, and a resulting UTC year 0001..9999. timeZone must be accepted by Intl.DateTimeFormat. Explicit offset determines the instant; timeZone is display context, not a second instant parser.

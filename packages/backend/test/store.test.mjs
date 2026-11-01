@@ -112,6 +112,30 @@ test('SQL-like content is stored literally and does not affect other tasks', t =
   assert.ok(s.listTasks().some(a=>a.title===title));
 });
 
+test('creation rejects ill-formed Unicode instead of silently replacing user text', t => {
+  const s=fixture(t).open();
+  for (const field of ['title','notes']) {
+    for (const text of ['\ud800','\udc00']) {
+      rejects(()=>s.createTask({title:'Valid', [field]:text}),'VALIDATION_ERROR',field);
+      assert.deepEqual(s.listTasks(),[]);
+    }
+  }
+  const task=s.createTask({title:'数学 📚',notes:'Keep 🧑‍💻 intact'});
+  assert.equal(task.title,'数学 📚');
+  assert.equal(task.notes,'Keep 🧑‍💻 intact');
+});
+
+test('invalid Unicode update leaves all fields and revision unchanged', t => {
+  const s=fixture(t).open(), original=s.createTask({title:'Original',notes:'Keep me'});
+  for (const field of ['title','notes']) {
+    for (const text of ['\ud800','\udc00']) {
+      rejects(()=>s.updateTask({id:original.id,expectedRevision:1,
+        patch:{priority:'high',[field]:text}}),'VALIDATION_ERROR',field);
+      assert.deepEqual(s.listTasks(),[original]);
+    }
+  }
+});
+
 test('future schema and corrupt databases fail closed without reset', t => {
   const f=fixture(t);
   const d=new DatabaseSync(f.path); d.exec('PRAGMA user_version=99'); d.close();

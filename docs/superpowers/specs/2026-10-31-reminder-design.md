@@ -24,6 +24,7 @@ Storage adapter uses node:sqlite DatabaseSync, verified on local Node 24.16.0. E
 Create a task; save immediately; show actual saved tasks; edit title, notes, priority, estimate or deadline; explicitly complete/reopen; close and reopen the database/application without losing state. No automatic completion.
 A task has a UUID, original-language title/notes, pending/completed status, nullable completion instant, priority, optional estimate, optional deadline, timestamps and a positive revision.
 Title: trim outer whitespace, nonempty, at most 500 UTF-16 code units. Notes: preserve text, at most 10000 code units. Priority: low/normal/high (normal default). Estimate: null or integer 1..10080 minutes. No delete endpoint in this slice.
+Title and notes must be well-formed Unicode; reject lone surrogates before writing instead of silently replacing text. Valid emoji and combining sequences are preserved.
 Deadline: null, a date-only object with an IANA time zone, or a UTC instant with an IANA time zone. A date-only deadline remains date-only; no invented end-of-day timestamp. Exact timestamp input requires Z or a numeric offset and is normalized to UTC.
 Execution slots and reminders are separate future concepts; REM-001 exposes neither, rather than overloading deadline.
 All writes are atomic. Updates require expectedRevision; stale writes fail without data changes. The UI keeps prior values for an explicit undo via another revision-checked update. Undo must not silently overwrite intervening changes.

@@ -50,11 +50,11 @@ export function taskFieldsInput(input, patch = false) {
   if (patch && !Object.keys(input).length) invalid('patch');
   const result={};
   if (!patch || Object.hasOwn(input,'title')) {
-    if (typeof input.title !== 'string' || !input.title.trim() || input.title.trim().length>500) invalid('title');
+    if (typeof input.title !== 'string' || !input.title.isWellFormed() || !input.title.trim() || input.title.trim().length>500) invalid('title');
     result.title=input.title.trim();
   }
   if (Object.hasOwn(input,'notes')) {
-    if (typeof input.notes!=='string' || input.notes.length>10000) invalid('notes');
+    if (typeof input.notes!=='string' || !input.notes.isWellFormed() || input.notes.length>10000) invalid('notes');
     result.notes=input.notes;
   }
   if (Object.hasOwn(input,'priority')) {
