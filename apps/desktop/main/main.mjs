@@ -1,10 +1,13 @@
-import { app, BrowserWindow, ipcMain, dialog, session } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, session, safeStorage } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync, mkdirSync } from 'node:fs';
 import { createDispatcher } from '../../../packages/backend/src/dispatch.mjs';
 import { registerIpc } from './ipc.mjs';
 import { configureUserData } from './profile.mjs';
+import { createAssistantVault } from './assistant-config.mjs';
+import { createAssistantService } from '../../../packages/backend/src/assistant/service.mjs';
+import { createDeepSeekProvider } from '../../../packages/backend/src/assistant/provider.mjs';
 
 app.setName('Reminder');
 let window, store, dispose;
@@ -54,7 +57,10 @@ if (profileError) {
       window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
       window.webContents.on('will-navigate',event=>event.preventDefault());
       window.webContents.on('will-attach-webview',event=>event.preventDefault());
-      dispose=registerIpc(ipcMain,createDispatcher(store),()=>window?.isDestroyed()?null:window?.webContents,pathToFileURL(renderer).href);
+      const assistant=createAssistantService({store,
+        vault:createAssistantVault(join(userData,'assistant-config.json'),safeStorage),
+        provider:createDeepSeekProvider(),regionalLocale:app.getSystemLocale()});
+      dispose=registerIpc(ipcMain,createDispatcher(store),()=>window?.isDestroyed()?null:window?.webContents,pathToFileURL(renderer).href,assistant);
       await window.loadFile(renderer);
     } catch {
       dialog.showErrorBox('Reminder', 'Reminder could not open its local data or interface. Your data has not been reset. Close other instances and check storage access.');
