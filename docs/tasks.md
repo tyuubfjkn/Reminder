@@ -1,5 +1,5 @@
 # Reminder task register
-Design version: 1.0.1. API version: 1.0.0 (unchanged).
+Design version: 1.1.0. API: manual v1 + additive assistant v1.
 Initial baseline: 4b7592e7dd0e9fe49c8e0b0a014830a31682272d. Frozen BE/IPC baseline for CC: ab8d214892344be0639d2c801203c01587fa9b6d. Full task package: docs/handoffs/REM-001-FE.md. Target branch: main.
 
 | ID | User outcome / scope | Owner | Dependency | Allowed paths | Acceptance / state |
@@ -12,12 +12,26 @@ Initial baseline: 4b7592e7dd0e9fe49c8e0b0a014830a31682272d. Frozen BE/IPC baseli
 | REM-001-INT-01 | Isolated desktop tests and reproducible dependency install | Codex | REM-001-INT; baseline e26220c1af15fee913b97dbc385ed5287fd332f1 | apps/desktop/main/**, tools/**, packages/backend/test/**, root tooling, docs/**, .github/** | Real dual-profile/lock probe, cleanup and desktop E2E passed run 41272786937; root lock adopted from npm output; final npm ci and all checks passed run 41273019591; PR #4 merged |
 | REM-001-BE-01 | Preserve data during actual storage failure | Codex | REM-001-BE; baseline e26220c1af15fee913b97dbc385ed5287fd332f1 | packages/backend/**, tools/**, docs/**, .github/** | Actual VHD ENOSPC for create/update/settings, actual ACL denial, unchanged data/revisions and recovery passed run 41272786937; API v1 unchanged |
 | REM-001-INT-02 | Ensure the desktop test command reports child failures | Codex | Baseline 505f886ed295ddb2f56dc07f52196874cefa51a7; API v1 unchanged | tools/**, packages/backend/test/**, docs/** | Deferred minor: add an executable-boundary regression that fails if root process.exitCode propagation is removed; current implementation reviewed correct and helper/child tests pass |
-| REM-002 | Bilingual natural-language tasks | Codex + CC | REM-001-INT | Future card | Not started |
+| REM-002 | Bilingual natural-language tasks | Codex + CC | REM-001-INT; baseline 9db390c; planning d2ec9a8 | See plan and cards below | In progress; backend PR #8, renderer PR #7, integration draft #9; live provider pending |
 | REM-003 | Explicit, reliable reminders | Codex + CC | REM-001-INT | Future card | Running/closed/sleep verification required; not started |
 | REM-004 | Deadline-respecting scheduling | Codex + CC | Task/time model | Future card | Not started |
 | REM-005 | Recurrence instances | Codex + CC | Task/reminder model | Future card | Not started |
 | REM-006 | Accounts and sync | Codex + CC | Sync design | Future card | Not started |
 | REM-007 | Voice, screenshots, Windows sharing | Codex + CC | Capability validation | Future card | Not started |
+
+## REM-002 cards
+All cards use baseline `9db390c6cd37276845375c9768c8f17c49af3fc5`, shared design v1.1.0, `packages/contracts/api-v1.d.ts`, `docs/api-v1.md` and `docs/superpowers/plans/2026-11-01-rem-002.md`. Target: main.
+
+| ID | User result / scope | Owner | Dependency | Allowed paths | Acceptance / state |
+| --- | --- | --- | --- | --- | --- |
+| REM-002-BE-01 | Atomic changes, durable replay and whole-batch undo | Codex | Existing store | packages/backend/** | Implemented with real SQLite and schema migration tests |
+| REM-002-BE-02 | Bounded, sanitized DeepSeek protocol adapter | Codex | Shared contract | packages/backend/** | Fixture protocol/error/timeout tests pass; live key required for provider acceptance |
+| REM-002-BE-03 | Bilingual receipts, safe target/time clarification | Codex | BE-01/02 | packages/backend/** | Interleaved DST choices and stale task snapshots regression-tested |
+| REM-002-IPC | Encrypted local key and restricted assistant methods | Codex | BE-03 | apps/desktop/main/**, tools/**, backend tests | Actual Windows DPAPI/IPC probe; final CI tracked in verification record |
+| REM-002-FE | Assistant conversation, settings, clarification and undo | CC | Published d2ec9a8 planning contract; PR #8 backend | apps/desktop/renderer/** | PR #7 under independent review; no frontend acceptance yet |
+| REM-002-INT | Complete natural-language task loop | Codex | Backend + reviewed CC head + configured key | tools/**, docs/**, .github/** | Draft #9 combines sources; fixture integration and live-provider evidence kept separate |
+
+Order remains REM-002 -> REM-003 -> REM-004 -> REM-005. Do not mark later capabilities implemented based on model prose. Reminder acceptance must explicitly distinguish running/background/closed/sleep conditions.
 
 All first-slice cards refer to docs/superpowers/specs/2026-10-31-reminder-design.md, packages/contracts/api-v1.d.ts, docs/api-v1.md, and docs/superpowers/plans/2026-10-31-rem-001.md. Frontend review is anchored to PR #2 head 7bea04129b8a8999868253b47cb55b2911c343fd. Source integration evidence is recorded in docs/verification/rem-001.md.
 
