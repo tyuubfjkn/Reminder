@@ -1,0 +1,17 @@
+name: Backend
+on:
+  push:
+    branches: [main, 'codex/**', 'cc/**']
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.16.0'
+      - run: npm test

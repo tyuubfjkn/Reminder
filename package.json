@@ -1,0 +1,9 @@
+{
+  "name": "reminder",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24.16.0 <25" },
+  "scripts": { "test": "node --test packages/backend/test/*.test.mjs", "backend:cli": "node packages/backend/src/cli.mjs", "desktop": "electron apps/desktop/main/main.mjs" },
+  "devDependencies": { "electron": "45.2.1" }
+}
