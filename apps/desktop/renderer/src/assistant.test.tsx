@@ -587,3 +587,108 @@ describe('PR #7 review fixes', () => {
     await within(conversation()).findByText('Undid 1 change.');
   });
 });
+
+describe('PR #7 review: Try again clears the composer', () => {
+  // Blocker: a successful Try again left the original text in the composer, so Send created a duplicate.
+  it('clears the padded original text after a successful Try again so Send cannot duplicate it', async () => {
+    const { fake, ai, user } = setup();
+    ai.onSubmit(() => 'reject');
+    ai.onSubmit(input => {
+      const task = fake.externalCreate('retry task');
+      return { ok: true, data: reply(input, { message: 'Created 1 task.', changes: [{ kind: 'created', taskId: task.id, title: 'retry task' }], undoAvailable: true }) };
+    });
+    await openAssistant(user);
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    await user.click(box);
+    await user.paste('  Add retry task  ');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await user.click(within(await screen.findByRole('alert')).getByRole('button', { name: 'Try again' }));
+    await within(conversation()).findByText('Created 1 task.');
+    expect(box).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    expect(vi.mocked(ai.assistant.submit).mock.calls.map(c => c[0])).toEqual([
+      { requestId: id(1), text: 'Add retry task' },
+      { requestId: id(1), text: 'Add retry task' }
+    ]);
+    expect(fake.tasks).toHaveLength(1);
+  });
+
+  it('clears the composer after Try again when only whitespace changed since the failure', async () => {
+    const { ai, user } = setup();
+    ai.onSubmit(() => ({ ok: false, error: { code: 'AI_TIMEOUT' } }));
+    ai.onSubmit(input => ({ ok: true, data: reply(input, { message: 'Created 1 task.', undoAvailable: true }) }));
+    await openAssistant(user);
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    await user.click(box);
+    await user.paste('Add retry task');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    const alert = await screen.findByRole('alert');
+    await user.type(box, '   ');
+    await user.click(within(alert).getByRole('button', { name: 'Try again' }));
+    await within(conversation()).findByText('Created 1 task.');
+    expect(box).toHaveValue('');
+    expect(vi.mocked(ai.assistant.submit).mock.calls.map(c => c[0].requestId)).toEqual([id(1), id(1)]);
+  });
+
+  it('keeps genuinely newer text typed after the failure when Try again succeeds', async () => {
+    const { ai, user } = setup();
+    ai.onSubmit(() => 'reject');
+    ai.onSubmit(input => ({ ok: true, data: reply(input, { message: 'Created 1 task.', undoAvailable: true }) }));
+    await openAssistant(user);
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    await user.click(box);
+    await user.paste('  Add retry task  ');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    const alert = await screen.findByRole('alert');
+    await user.clear(box);
+    await user.paste('Also plan Friday');
+    await user.click(within(alert).getByRole('button', { name: 'Try again' }));
+    await within(conversation()).findByText('Created 1 task.');
+    expect(box).toHaveValue('Also plan Friday');
+    // The retry was the identical original request, never the newer text.
+    expect(vi.mocked(ai.assistant.submit).mock.calls.map(c => c[0])).toEqual([
+      { requestId: id(1), text: 'Add retry task' },
+      { requestId: id(1), text: 'Add retry task' }
+    ]);
+  });
+
+  it('does not clear unrelated composer text when retrying a structured answer', async () => {
+    const { ai, user } = setup();
+    ai.onSubmit(input => ({ ok: true, data: reply(input, { outcome: 'clarification', message: 'Which one?',
+      choices: { kind: 'task', tasks: [{ id: 'a', title: 'A', status: 'pending', deadline: null }, { id: 'b', title: 'B', status: 'pending', deadline: null }] } }) }));
+    ai.onSubmit(() => 'reject');
+    ai.onSubmit(input => ({ ok: true, data: reply(input, { message: 'Completed A.', undoAvailable: true }) }));
+    await openAssistant(user);
+    await send(user, 'Finish it');
+    const entry = (await within(conversation()).findByText('Which one?')).closest('li')!;
+    await user.click(within(entry).getByRole('button', { name: /^A ·/ }));
+    const alert = await screen.findByRole('alert');
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    await user.type(box, 'A');
+    await user.click(within(alert).getByRole('button', { name: 'Try again' }));
+    await within(conversation()).findByText('Completed A.');
+    expect(box).toHaveValue('A');
+    expect(vi.mocked(ai.assistant.submit).mock.calls.map(c => c[0])).toEqual([
+      { requestId: id(1), text: 'Finish it' },
+      { requestId: id(2), text: 'A', conversationId: 'conv-1', choice: { taskId: 'a' } },
+      { requestId: id(2), text: 'A', conversationId: 'conv-1', choice: { taskId: 'a' } }
+    ]);
+  });
+
+  it('carries the submitted draft through repeated failed retries in the hook', async () => {
+    const ai = createFakeAssistant({ hasKey: true });
+    ai.onSubmit(() => 'reject');
+    ai.onSubmit(() => ({ ok: false, error: { code: 'AI_UNAVAILABLE' } }));
+    ai.onSubmit(input => ({ ok: true, data: reply(input, { outcome: 'unsupported', message: 'OK.' }) }));
+    const { result } = renderHook(() => useAssistant(ai.assistant, async () => true));
+    act(() => result.current.setDraft('  Add retry task  '));
+    await act(() => result.current.send(result.current.draft));
+    await act(() => result.current.retry());
+    expect(result.current.draft).toBe('  Add retry task  ');
+    await act(() => result.current.retry());
+    expect(result.current.draft).toBe('');
+    expect(vi.mocked(ai.assistant.submit).mock.calls.map(c => c[0])).toEqual(
+      Array(3).fill({ requestId: id(1), text: 'Add retry task' }));
+  });
+});
