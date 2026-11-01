@@ -144,6 +144,56 @@ assert.match(await row(page, 'Finish my essay').innerText(), /Due Fri, Nov 6, 20
 await shot(page, '07-timezone-los-angeles');
 log('8 exact deadline shown in selected zone, date-only unshifted');
 
+// Review fix 1: DST gap is rejected with zero writes; a DST fold needs an explicit occurrence.
+const setZone = async zone => {
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('combobox', { name: 'Time zone' }).selectOption(zone);
+  await page.getByRole('status').filter({ hasText: 'Settings saved.' }).waitFor();
+  await page.getByRole('button', { name: 'Tasks' }).click();
+};
+await setZone('America/New_York');
+const countBeforeDst = (await list(page)).data.length;
+const newForm = page.getByRole('form', { name: 'New task' });
+await newForm.getByRole('textbox', { name: 'Title' }).fill('DST check');
+await newForm.getByRole('button', { name: 'More details' }).click();
+await newForm.getByRole('radio', { name: 'Date and time' }).click();
+await newForm.getByLabel('Deadline date').fill('2027-03-14');
+await newForm.getByLabel('Deadline time').fill('02:30');
+await newForm.getByRole('button', { name: 'Add task' }).click();
+await page.getByText(/02:30 doesn’t exist on that date in America\/New_York/).waitFor();
+assert.equal((await list(page)).data.length, countBeforeDst, 'gap time wrote nothing');
+await shot(page, '11-dst-gap-rejected');
+await newForm.getByLabel('Deadline date').fill('2027-11-07');
+await newForm.getByLabel('Deadline time').fill('01:30');
+await newForm.getByRole('button', { name: 'Add task' }).click();
+await page.getByText(/01:30 happens twice on that date/).waitFor();
+assert.equal((await list(page)).data.length, countBeforeDst, 'unchosen fold wrote nothing');
+await newForm.getByRole('radio', { name: /Second 01:30 \(GMT-5\)/ }).click();
+await shot(page, '12-dst-fold-choice');
+await newForm.getByRole('button', { name: 'Add task' }).click();
+await row(page, 'DST check').waitFor();
+assert.deepEqual((await list(page)).data.find(t => t.title === 'DST check').deadline,
+  { kind: 'instant', at: '2027-11-07T06:30:00.000Z', timeZone: 'America/New_York' });
+await setZone('America/Los_Angeles');
+log('review 1: NY gap rejected (no write); fold saved as chosen later occurrence 06:30Z');
+
+// Review fix 2: a stale edit keeps its draft when another writer moves the task to Completed.
+await row(page, 'Exam').getByRole('button', { name: 'Edit' }).click();
+await page.getByRole('form', { name: 'Edit task' }).getByRole('textbox', { name: 'Title' }).fill('Exam (room 4)');
+const exam = (await list(page)).data.find(t => t.title === 'Exam');
+await page.evaluate(e => window.reminder.tasks.update({ id: e.id, expectedRevision: e.revision, patch: { status: 'completed' } }), exam);
+await page.getByRole('form', { name: 'Edit task' }).getByRole('button', { name: 'Save changes' }).click();
+await page.getByRole('alert').filter({ hasText: 'your edit wasn’t saved' }).waitFor();
+const completedForm = page.getByRole('region', { name: 'Completed' }).getByRole('form', { name: 'Edit task' });
+assert.equal(await completedForm.getByRole('textbox', { name: 'Title' }).inputValue(), 'Exam (room 4)');
+await shot(page, '13-status-move-conflict-draft-kept');
+await completedForm.getByRole('button', { name: 'Save changes' }).click();
+await row(page, 'Exam (room 4)').waitFor();
+const examAfter = (await list(page)).data.find(t => t.id === exam.id);
+assert.equal(examAfter.title, 'Exam (room 4)');
+assert.equal(examAfter.status, 'completed');
+log('review 2: draft kept after pending->completed move; explicit re-save applied on new revision');
+
 // Switch to zh-CN; task text stays as written.
 await page.getByRole('button', { name: 'Settings' }).click();
 await page.getByRole('combobox', { name: 'Language' }).selectOption('zh-CN');

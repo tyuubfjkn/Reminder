@@ -21,15 +21,37 @@ function offsetMs(ms: number, timeZone: string): number {
   return utcMs(p.y, p.mo, p.d, p.h, p.mi, p.s) - Math.floor(ms / 1000) * 1000;
 }
 
-/** Wall-clock date (YYYY-MM-DD) and time (HH:mm) in `timeZone` to a UTC ISO instant. */
-export function zonedToUtcIso(date: string, time: string, timeZone: string): string {
+export type ZonedResolution =
+  | { kind: 'ok'; at: string }
+  /** The wall time is skipped by a forward transition (for example a DST spring gap). */
+  | { kind: 'gap' }
+  /** The wall time occurs twice (for example a DST fall-back); the user must choose. */
+  | { kind: 'fold'; earlier: string; later: string };
+
+const DAY = 86_400_000;
+
+/**
+ * Wall-clock date (YYYY-MM-DD) and time (HH:mm) in `timeZone` to UTC. Every candidate instant is
+ * checked against the requested wall time, so a gap is never silently moved and a fold is never guessed.
+ */
+export function resolveZoned(date: string, time: string, timeZone: string): ZonedResolution {
   const [y, mo, d] = date.split('-').map(Number);
   const [h, mi] = time.split(':').map(Number);
   const wall = utcMs(y, mo, d, h, mi);
-  let utc = wall - offsetMs(wall, timeZone);
-  const corrected = wall - offsetMs(utc, timeZone);
-  if (corrected !== utc) utc = corrected;
-  return new Date(utc).toISOString();
+  const offsets = new Set([wall - DAY, wall, wall + DAY].map(ms => offsetMs(ms, timeZone)));
+  const matches = [...new Set([...offsets].map(o => wall - o))]
+    .filter(utc => { const p = zoneParts(utc, timeZone); return utcMs(p.y, p.mo, p.d, p.h, p.mi, p.s) === wall; })
+    .sort((a, b) => a - b)
+    .map(utc => new Date(utc).toISOString());
+  if (!matches.length) return { kind: 'gap' };
+  if (matches.length === 1) return { kind: 'ok', at: matches[0] };
+  return { kind: 'fold', earlier: matches[0], later: matches[matches.length - 1] };
+}
+
+/** Short UTC offset label for an instant in a zone, such as "GMT-5". */
+export function offsetLabel(at: string, timeZone: string, locale: Locale): string {
+  return new Intl.DateTimeFormat(locale, { timeZone, timeZoneName: 'shortOffset' })
+    .formatToParts(new Date(at)).find(p => p.type === 'timeZoneName')?.value ?? '';
 }
 
 const pad = (n: number, w = 2) => String(n).padStart(w, '0');

@@ -3,7 +3,7 @@ import type { ReminderApi, Task } from './api/contract';
 import { I18nProvider, makeI18n, useI18n } from './i18n/context';
 import { draftToCreate, draftToPatch, type Draft } from './taskDraft';
 import { useReminder, type Notice, type UndoEntry } from './useReminder';
-import { TaskForm } from './components/TaskForm';
+import { TaskForm, type EditorStash, type EditorState } from './components/TaskForm';
 import { TaskItem } from './components/TaskItem';
 import { SettingsView } from './components/SettingsView';
 
@@ -34,7 +34,11 @@ export function App({ api }: { api: ReminderApi | null }) {
 function Ready({ state }: { state: ReturnType<typeof useReminder> }) {
   const { t, timeZone } = useI18n();
   const [view, setView] = useState<View>('tasks');
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingId, setEditing] = useState<string | null>(null);
+  // Lives above both lists: a refresh that moves the task to the other list must not drop the draft.
+  const editor = useRef<EditorState | undefined>(undefined);
+  const stash = useMemo<EditorStash>(() => ({ get: () => editor.current, set: s => { editor.current = s; } }), [editingId]);
+  const setEditingId = (id: string | null) => { editor.current = undefined; setEditing(id); };
   const [focusRequest, setFocusRequest] = useState(0);
   const titleRef = useRef<HTMLInputElement>(null);
 
@@ -75,7 +79,7 @@ function Ready({ state }: { state: ReturnType<typeof useReminder> }) {
     <ul className="task-list">
       {tasks.map(task => editingId === task.id ? (
         <li key={task.id} className="task editing-row">
-          <TaskForm task={task} onSubmit={save(task)} onCancel={() => setEditingId(null)} />
+          <TaskForm task={task} stash={stash} onSubmit={save(task)} onCancel={() => setEditingId(null)} />
         </li>
       ) : (
         <TaskItem key={task.id} task={task} busy={state.busyIds.has(task.id)} onToggle={toggle} onEdit={t => setEditingId(t.id)} />

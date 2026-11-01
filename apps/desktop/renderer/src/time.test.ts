@@ -1,12 +1,26 @@
-import { formatDeadline, formatMinutes, isOverdue, utcToZoned, zonedToUtcIso } from './time';
+import { formatDeadline, formatMinutes, isOverdue, resolveZoned, utcToZoned } from './time';
 
-describe('zonedToUtcIso', () => {
+describe('resolveZoned', () => {
   it('converts wall time in a zone to a UTC instant', () => {
-    expect(zonedToUtcIso('2026-11-06', '17:00', 'Asia/Shanghai')).toBe('2026-11-06T09:00:00.000Z');
+    expect(resolveZoned('2026-11-06', '17:00', 'Asia/Shanghai')).toEqual({ kind: 'ok', at: '2026-11-06T09:00:00.000Z' });
   });
   it('respects daylight saving in the target zone', () => {
-    expect(zonedToUtcIso('2026-07-01', '09:30', 'America/New_York')).toBe('2026-07-01T13:30:00.000Z');
-    expect(zonedToUtcIso('2026-12-01', '09:30', 'America/New_York')).toBe('2026-12-01T14:30:00.000Z');
+    expect(resolveZoned('2026-07-01', '09:30', 'America/New_York')).toEqual({ kind: 'ok', at: '2026-07-01T13:30:00.000Z' });
+    expect(resolveZoned('2026-12-01', '09:30', 'America/New_York')).toEqual({ kind: 'ok', at: '2026-12-01T14:30:00.000Z' });
+  });
+  it('reports wall times skipped by a spring-forward gap instead of inventing another time', () => {
+    expect(resolveZoned('2027-03-14', '02:30', 'America/New_York')).toEqual({ kind: 'gap' });
+    expect(resolveZoned('2027-03-28', '02:30', 'Europe/Berlin')).toEqual({ kind: 'gap' });
+  });
+  it('reports both occurrences of a repeated fall-back wall time', () => {
+    expect(resolveZoned('2027-11-07', '01:30', 'America/New_York'))
+      .toEqual({ kind: 'fold', earlier: '2027-11-07T05:30:00.000Z', later: '2027-11-07T06:30:00.000Z' });
+    expect(resolveZoned('2027-10-31', '02:30', 'Europe/Berlin'))
+      .toEqual({ kind: 'fold', earlier: '2027-10-31T00:30:00.000Z', later: '2027-10-31T01:30:00.000Z' });
+  });
+  it('treats the boundary minutes around a transition as ordinary', () => {
+    expect(resolveZoned('2027-03-14', '03:00', 'America/New_York')).toEqual({ kind: 'ok', at: '2027-03-14T07:00:00.000Z' });
+    expect(resolveZoned('2027-11-07', '02:00', 'America/New_York')).toEqual({ kind: 'ok', at: '2027-11-07T07:00:00.000Z' });
   });
   it('round-trips through utcToZoned', () => {
     expect(utcToZoned('2026-11-06T09:00:00.000Z', 'Asia/Shanghai')).toEqual({ date: '2026-11-06', time: '17:00' });

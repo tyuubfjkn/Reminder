@@ -351,6 +351,148 @@ describe('settings', () => {
   });
 });
 
+describe('daylight-saving transitions', () => {
+  async function fillExact(user: ReturnType<typeof userEvent.setup>, title: string, date: string, time: string) {
+    await user.type(screen.getByRole('textbox', { name: 'Title' }), title);
+    await user.click(screen.getByRole('button', { name: 'More details' }));
+    await user.click(screen.getByRole('radio', { name: 'Date and time' }));
+    await user.type(screen.getByLabelText('Deadline date'), date);
+    await user.type(screen.getByLabelText('Deadline time'), time);
+  }
+
+  it.each([
+    ['America/New_York', '2027-03-14'],
+    ['Europe/Berlin', '2027-03-28']
+  ])('rejects a skipped wall time in %s with a localized field error and no write', async (timeZone, date) => {
+    const { fake, user } = setup(createFakeApi({ settings: { timeZone } }));
+    await screen.findByRole('heading', { name: 'No tasks yet' });
+    await fillExact(user, 'Gap', date, '02:30');
+    await user.click(screen.getByRole('button', { name: 'Add task' }));
+    expect(screen.getByText(/02:30 doesn’t exist on that date in/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Deadline time')).toHaveAttribute('aria-invalid', 'true');
+    expect(fake.api.tasks.create).not.toHaveBeenCalled();
+  });
+
+  it('requires choosing which occurrence of a repeated wall time is meant (New York)', async () => {
+    const { fake, user } = setup(createFakeApi({ settings: { timeZone: 'America/New_York' } }));
+    await screen.findByRole('heading', { name: 'No tasks yet' });
+    await fillExact(user, 'Fold', '2027-11-07', '01:30');
+    await user.click(screen.getByRole('button', { name: 'Add task' }));
+    expect(screen.getByText(/01:30 happens twice on that date/)).toBeInTheDocument();
+    expect(fake.api.tasks.create).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('radio', { name: /Second.*GMT-5/ }));
+    await user.click(screen.getByRole('button', { name: 'Add task' }));
+    expect(fake.api.tasks.create).toHaveBeenCalledWith(expect.objectContaining({
+      deadline: { kind: 'instant', at: '2027-11-07T06:30:00.000Z', timeZone: 'America/New_York' }
+    }));
+  });
+
+  it('creates the earlier occurrence of a repeated wall time when chosen (Berlin)', async () => {
+    const { fake, user } = setup(createFakeApi({ settings: { timeZone: 'Europe/Berlin' } }));
+    await screen.findByRole('heading', { name: 'No tasks yet' });
+    await fillExact(user, 'Fold', '2027-10-31', '02:30');
+    await user.click(screen.getByRole('radio', { name: /First.*GMT\+2/ }));
+    await user.click(screen.getByRole('button', { name: 'Add task' }));
+    expect(fake.api.tasks.create).toHaveBeenCalledWith(expect.objectContaining({
+      deadline: { kind: 'instant', at: '2027-10-31T00:30:00.000Z', timeZone: 'Europe/Berlin' }
+    }));
+  });
+
+  it('keeps the saved occurrence when editing a task whose deadline is the later repeated time', async () => {
+    const deadline = { kind: 'instant' as const, at: '2027-11-07T06:30:00.000Z', timeZone: 'America/New_York' };
+    const { fake, user } = setup(createFakeApi({ settings: { timeZone: 'America/New_York' }, tasks: [makeTask({ deadline })] }));
+    await waitFor(() => item('Existing task'));
+    await user.click(within(item('Existing task')).getByRole('button', { name: 'Edit' }));
+    const form = screen.getByRole('form', { name: 'Edit task' });
+    expect(within(form).getByRole('radio', { name: /Second.*GMT-5/ })).toBeChecked();
+    await user.click(within(form).getByRole('radio', { name: /First.*GMT-4/ }));
+    await user.click(within(form).getByRole('button', { name: 'Save changes' }));
+    expect(fake.api.tasks.update).toHaveBeenLastCalledWith({
+      id: makeTask().id, expectedRevision: 1,
+      patch: { deadline: { kind: 'instant', at: '2027-11-07T05:30:00.000Z', timeZone: 'America/New_York' } }
+    });
+  });
+});
+
+describe('conflicts that move a task between lists', () => {
+  it.each([
+    ['pending', 'completed'],
+    ['completed', 'pending']
+  ] as const)('keeps the draft when another writer moves the task from %s to %s', async (from, to) => {
+    const fake = createFakeApi({ tasks: [makeTask({ title: 'Essay', status: from, completedAt: from === 'completed' ? '2026-10-30T11:00:00.000Z' : null })] });
+    const { user } = setup(fake);
+    await waitFor(() => item('Essay'));
+    await user.click(within(item('Essay')).getByRole('button', { name: 'Edit' }));
+    let form = screen.getByRole('form', { name: 'Edit task' });
+    await user.clear(within(form).getByRole('textbox', { name: 'Title' }));
+    await user.type(within(form).getByRole('textbox', { name: 'Title' }), 'Essay, final draft');
+    fake.externalEdit(makeTask().id, { status: to, notes: 'From elsewhere' });
+    await user.click(within(form).getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('your edit wasn’t saved');
+    const section = screen.getByRole('region', { name: to === 'completed' ? 'Completed' : 'To do' });
+    form = within(section).getByRole('form', { name: 'Edit task' });
+    expect(within(form).getByRole('textbox', { name: 'Title' })).toHaveValue('Essay, final draft');
+    expect(within(form).getByRole('textbox', { name: 'Notes' })).toHaveValue('From elsewhere');
+    expect(fake.tasks[0]).toMatchObject({ title: 'Essay', status: to, revision: 2 });
+
+    await user.click(within(form).getByRole('button', { name: 'Save changes' }));
+    expect(fake.api.tasks.update).toHaveBeenLastCalledWith({ id: makeTask().id, expectedRevision: 2, patch: { title: 'Essay, final draft' } });
+    await waitFor(() => expect(fake.tasks[0]).toMatchObject({ title: 'Essay, final draft', status: to, notes: 'From elsewhere' }));
+  });
+
+  it('does not claim the latest version loaded when the conflict refresh fails', async () => {
+    const fake = createFakeApi({ tasks: [makeTask({ title: 'Essay' })] });
+    const { user } = setup(fake);
+    await waitFor(() => item('Essay'));
+    await user.click(within(item('Essay')).getByRole('button', { name: 'Edit' }));
+    fake.externalEdit(makeTask().id, { notes: 'x' });
+    fake.inject('tasks.list', 'reject');
+    const form = screen.getByRole('form', { name: 'Edit task' });
+    await user.type(within(form).getByRole('textbox', { name: 'Title' }), '!');
+    await user.click(within(form).getByRole('button', { name: 'Save changes' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('the latest version couldn’t be loaded');
+    expect(alert).not.toHaveTextContent('newer saved values');
+    expect(within(screen.getByRole('form', { name: 'Edit task' })).getByRole('textbox', { name: 'Title' })).toHaveValue('Essay!');
+  });
+
+  it('does not claim the latest version loaded when an undo-conflict refresh fails', async () => {
+    const fake = createFakeApi({ tasks: [makeTask({ title: 'Essay' })] });
+    const { user } = setup(fake);
+    await waitFor(() => item('Essay'));
+    await user.click(screen.getByRole('checkbox', { name: 'Essay' }));
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Essay' })).toBeChecked());
+    fake.externalEdit(makeTask().id, { notes: 'x' });
+    fake.inject('tasks.list', 'reject');
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('the latest version couldn’t be loaded');
+    expect(alert).not.toHaveTextContent('latest saved version is shown');
+  });
+});
+
+describe('settings follow-ups', () => {
+  it('can select UTC again after switching away', async () => {
+    const fake = createFakeApi({ settings: { timeZone: 'UTC' } });
+    const { user } = setup(fake);
+    await screen.findByRole('heading', { name: 'No tasks yet' });
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Time zone' }), 'Asia/Tokyo');
+    await waitFor(() => expect(fake.settings.timeZone).toBe('Asia/Tokyo'));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Time zone' }), 'UTC');
+    await waitFor(() => expect(fake.settings.timeZone).toBe('UTC'));
+  });
+
+  it('shows the unavailable state in the saved language when only the task list fails', async () => {
+    const fake = createFakeApi({ settings: { locale: 'zh-CN' } });
+    fake.inject('tasks.list', { ok: false, error: { code: 'STORAGE_ERROR' } });
+    setup(fake);
+    expect(await screen.findByRole('heading', { name: 'Reminder 无法读取已保存的数据' })).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe('zh-CN');
+  });
+});
+
 describe('keyboard', () => {
   it('focuses the new-task title with Ctrl+N', async () => {
     const { user } = setup();
