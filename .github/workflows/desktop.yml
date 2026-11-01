@@ -1,0 +1,49 @@
+name: Desktop integration
+on:
+  push:
+    branches: [main, codex/rem-001-integration]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  desktop:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.16.0'
+      - name: Install pinned desktop runtime
+        run: npm install --registry=https://registry.npmjs.org
+      - name: Backend tests
+        run: npm test
+      - name: Install renderer
+        working-directory: apps/desktop/renderer
+        run: npm ci --registry=https://registry.npmjs.org
+      - name: Renderer tests
+        working-directory: apps/desktop/renderer
+        run: npm test
+      - name: Typecheck
+        working-directory: apps/desktop/renderer
+        run: npm run typecheck
+      - name: Build renderer
+        working-directory: apps/desktop/renderer
+        run: npm run build
+      - name: Real Electron restart and persistence
+        working-directory: apps/desktop/renderer
+        shell: pwsh
+        run: |
+          npm run e2e 2>&1 | Tee-Object -FilePath desktop-e2e.log
+          exit $LASTEXITCODE
+      - name: Preserve verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-verification-${{ github.sha }}
+          path: |
+            package-lock.json
+            apps/desktop/renderer/desktop-e2e.log
+            apps/desktop/renderer/docs/evidence/*.png
+          retention-days: 7
