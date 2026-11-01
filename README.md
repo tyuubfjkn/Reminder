@@ -3,7 +3,7 @@ AI-assisted personal tasks and time management for Windows. Manual tasks work lo
 
 ## Current slice
 REM-001 backend provides SQLite persistence, create/list/edit/complete/reopen, date-only and exact deadlines, revision checks and saved language/timezone preferences. DeepSeek, scheduling, reminders, recurrence and sync are not implemented.
-The Electron adapter is present. The React renderer is assigned to Claude Code; no complete desktop application or installer is claimed yet.
+The Electron/React manual-task loop has passed real Windows desktop and restart verification. No installer is published yet.
 
 ## Backend development
 Use Node 24.16.0 or later in major 24.
@@ -19,20 +19,27 @@ Enter JSON lines such as:
 ```
 CLI tests require no npm install and no network. Use a disposable database for experiments. Database files are ignored by Git.
 
-## Desktop integration (after CC delivers the renderer)
-Install root dependencies with npm install (Electron is pinned). From apps/desktop/renderer run npm install and npm run build, which must produce dist/index.html with relative assets (Vite base './').
+## Desktop development
+Install root dependencies with npm ci (Electron and its dependency graph are locked). From apps/desktop/renderer run npm ci and npm run build, which must produce dist/index.html with relative assets (Vite base './').
 Then from the repository root run npm run desktop. Renderer source stays in its own package; use built files for real IPC testing, not a browser page. Electron database: app.getPath('userData')/reminder.sqlite.
-Current environment cannot download npm dependencies; desktop runtime and installer verification are pending. A root lockfile must be generated and reviewed when dependency installation is available. Backend CI runs without it.
+
+After building, run `npm run test:desktop` from the root for real E2E. It creates a temporary profile, verifies two concurrent isolated Electron profiles, then runs the renderer restart/persistence scenario and cleans up its own profile. Never point automated E2E at personal data or invoke the legacy renderer E2E script directly. CI preserves logs/screenshots outside the temporary profile.
+
+For manual development, optionally set `REMINDER_USER_DATA_DIR` to an absolute dedicated directory before `npm run desktop`. The override configures both SQLite userData and Chromium sessionData before startup. Without it, ordinary storage is unchanged. Invalid/unavailable overrides fail closed; packaged apps reject this development override. Clear the environment variable to return to normal data. No profile is migrated, reset or deleted by the app.
+
+Windows CI runs `tools/storage-faults.ps1` only on disposable hosted runners. It creates its own 64 MiB VHD, induces OS ENOSPC and temporary file ACL write denial, checks real storage atomicity/recovery, and detaches the VHD. Do not run this against personal storage. Backend unit/CLI tests still require no dependency installation.
 
 ## Sources of truth
 - Design: docs/superpowers/specs/2026-10-31-reminder-design.md
 - API: packages/contracts/api-v1.d.ts and docs/api-v1.md
 - Implementation plan: docs/superpowers/plans/2026-10-31-rem-001.md
+- Cleanup plan: docs/superpowers/plans/2026-11-01-rem-001-hardening.md
 - Task register: docs/tasks.md
 - Test evidence and limits: docs/verification/rem-001.md
 - CC handoff: docs/handoffs/REM-001-FE.md (published with the frozen baseline)
+- CC cleanup handoff: docs/handoffs/REM-001-FE-01.md
 
 ## Collaboration and release
 Use an independent checkout and feature branch. Target main with a PR. Codex owns shared contracts and main/preload; CC owns renderer. No secrets in source or the desktop bundle.
-Backend foundation can merge with backend evidence. REM-001 remains open until the combined desktop restart/localization loop is verified.
+The REM-001 source desktop loop is accepted. Cleanup and release readiness are tracked separately in docs/tasks.md; installer and notification claims require their own verification.
 No release yet. Before publishing an installer, record verified source SHA, Windows/Electron versions, hashes, installation/restart results and release notes. Keep the previous artifact; back up userData with the app closed before rollback. Do not downgrade a newer database schema or remove user data.

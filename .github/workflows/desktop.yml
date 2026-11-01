@@ -16,9 +16,12 @@ jobs:
         with:
           node-version: '24.16.0'
       - name: Install pinned desktop runtime
-        run: npm install --registry=https://registry.npmjs.org
+        run: npm ci --registry=https://registry.npmjs.org
       - name: Backend tests
         run: npm test
+      - name: Real Windows storage failures
+        shell: pwsh
+        run: ./tools/storage-faults.ps1
       - name: Install renderer
         working-directory: apps/desktop/renderer
         run: npm ci --registry=https://registry.npmjs.org
@@ -47,12 +50,11 @@ jobs:
           console.log({status:result.status,signal:result.signal,error:result.error?.message,stdout:result.stdout,stderr:result.stderr});
           '@ | node
       - name: Real Electron restart and persistence
-        working-directory: apps/desktop/renderer
         shell: pwsh
         env:
           DEBUG: pw:browser
         run: |
-          npm run e2e 2>&1 | Tee-Object -FilePath desktop-e2e.log
+          npm run test:desktop 2>&1 | Tee-Object -FilePath desktop-e2e.log
           exit $LASTEXITCODE
       - name: Preserve verification evidence
         if: always()
@@ -61,7 +63,7 @@ jobs:
           name: desktop-verification-${{ github.sha }}
           path: |
             package-lock.json
-            apps/desktop/renderer/desktop-e2e.log
+            desktop-e2e.log
           retention-days: 7
       - name: Preserve screenshots from a successful desktop run
         if: success()

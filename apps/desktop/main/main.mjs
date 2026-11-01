@@ -4,10 +4,17 @@ import { dirname, join } from 'node:path';
 import { existsSync, mkdirSync } from 'node:fs';
 import { createDispatcher } from '../../../packages/backend/src/dispatch.mjs';
 import { registerIpc } from './ipc.mjs';
+import { configureUserData } from './profile.mjs';
 
 app.setName('Reminder');
 let window, store, dispose;
-if (!app.requestSingleInstanceLock()) {
+let profileError = false;
+try { configureUserData(app, process.env.REMINDER_USER_DATA_DIR); }
+catch { profileError = true; }
+if (profileError) {
+  dialog.showErrorBox('Reminder', 'The development data directory is invalid or unavailable. Default data has not been opened.');
+  app.exit(1);
+} else if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => {
