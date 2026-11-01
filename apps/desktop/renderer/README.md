@@ -32,14 +32,20 @@ Environment: Windows 11 Pro 10.0.26200.9711, Node 24.16.0, npm 11.13.0, Electron
 Chromium 156.0.8078.75). Source baseline `ab8d214892344be0639d2c801203c01587fa9b6d`.
 
 ### A. Mock-only (renderer tests; not evidence of persistence)
-`npm test` → 4 files, **44 passed**. Tests run with host `TZ=Pacific/Kiritimati` (UTC+14) to catch date shifts. They cover:
+`npm test` → 4 files, **58 passed**. Tests run with host `TZ=Pacific/Kiritimati` (UTC+14) to catch date shifts. They cover:
 loading/empty/unavailable/bridge-missing states, a rejected list call not shown as empty, create with estimate and a date-only
 or exact deadline, the localized blank-title error (en-US and zh-CN) with no write, a rejected create that keeps input and shows no success,
 a server field error, duplicate-submit lock, HTML-like text shown as text, edit + undo with the returned revision, an unchanged
 edit making no write, Escape cancel, complete → undo → complete → reopen, a failed completion not shown, a stale edit conflict
 that keeps both the newer save and the draft, an undo conflict that doesn't overwrite, a transient undo failure that keeps Undo available, an overdue task staying pending,
 no spurious deadline patch after a time zone change, a zh-CN switch keeping task text, a failed or conflicting settings save, time zone display, and Ctrl+N.
-I checked that the tests can fail by breaking behavior on purpose (sending Undo with a stale revision; formatting date-only deadlines in the display zone):
+Review-fix regressions (Codex review of `4874258`), each seen failing before the fix:
+DST gap rejected with a localized field error and zero writes (New York 2027-03-14 02:30, Berlin 2027-03-28 02:30); DST fold
+requires an explicit First/Second occurrence (New York 2027-11-07 01:30, Berlin 2027-10-31 02:30), and editing keeps the saved
+occurrence; a stale edit keeps its draft when another writer moves the task pending → completed and completed → pending;
+a failed conflict refresh no longer claims the latest version loaded (edit and undo); UTC is selectable again; zh-CN
+settings survive a task-list load failure on the unavailable page.
+I checked that the tests can fail by breaking behavior on purpose (also: removing the editor stash, removing the gap check) (sending Undo with a stale revision; formatting date-only deadlines in the display zone):
 the related tests failed, then passed again after I restored the code.
 
 `npm run typecheck` → exit 0. `npm run build` → `dist/index.html` plus `./assets/index-*.js|css`. Root `npm test` → 15 passed, 0 failed.
@@ -53,11 +59,13 @@ Exit 0. Every step is checked with assertions on the UI **and** on data read bac
 5. Edit notes → complete → Undo → complete → Reopen: ended pending, `completedAt: null`, revision 6.
 6. Stale edit (another write landed while the form was open): localized conflict, and the newer `priority: high` was kept. Undo conflict: the newer notes were kept and the task stayed completed.
 7. Switched time zone to America/Los_Angeles: Exam shows "1:00 AM PST" and the essay still shows Nov 6.
+   In America/New_York, 2027-03-14 02:30 was rejected with no write. 2027-11-07 01:30 required a choice; with "Second (GMT-5)" it was saved as `2027-11-07T06:30:00.000Z`.
+   A stale edit of Exam while another write completed it: the draft title was kept in the form under Completed, and an explicit re-save applied it.
 8. Switched to zh-CN, **quit Electron, relaunched**: zh-CN UI, time zone kept, `tasks.list()` deep-equal to the pre-quit list,
    the date-only deadline shows "2026年11月6日周五", and completion states were kept.
 9. Window at the shell minimum of 760×540: no horizontal overflow. Ctrl+N focuses the new-task title from Settings.
 
-Screenshots from that run are in `docs/evidence/` (`01`–`10`). They show real desktop data entered by the script, not fixtures.
+Screenshots from that run are in `docs/evidence/` (`01`–`13`). They show real desktop data entered by the script, not fixtures.
 
 Not exercised against the real backend: rejected IPC or `STORAGE_ERROR` (only covered by the fake API), a real second window, and
 an actual Chinese-language Windows install (simulated with Chromium `--lang`). No installer or notification claims.

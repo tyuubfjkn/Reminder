@@ -27,21 +27,24 @@ export function useReminder(api: ReminderApi | null) {
     setPhase({ kind: 'loading' });
     const s = await call(() => api.settings.get());
     const list = s.ok ? await call(() => api.tasks.list()) : null;
+    // Keep settings that did load, so the unavailable page still uses the saved language.
+    if (s.ok) setSettings(s.data);
     if (!s.ok || !list?.ok) {
       setPhase({ kind: 'unavailable', reason: 'error' });
       return;
     }
-    setSettings(s.data);
     setTasks(list.data);
     setPhase({ kind: 'ready' });
   }, [api]);
 
   useEffect(() => { void load(); }, [load]);
 
-  const refreshTasks = useCallback(async () => {
-    if (!api) return;
+  /** Reloads the list; false when the latest saved state could not be loaded. */
+  const refreshTasks = useCallback(async (): Promise<boolean> => {
+    if (!api) return false;
     const list = await call(() => api.tasks.list());
     if (list.ok) setTasks(list.data);
+    return list.ok;
   }, [api]);
 
   const replace = (task: Task) => setTasks(current => current.map(t => (t.id === task.id ? task : t)));
@@ -80,8 +83,10 @@ export function useReminder(api: ReminderApi | null) {
         undo: { taskId: task.id, revision: result.data.revision, patch: inversePatch(task, patch) }
       });
     } else if (result.error.code === 'CONFLICT' || result.error.code === 'NOT_FOUND') {
-      await refreshTasks();
-      fail(result, result.error.code === 'CONFLICT' && !('status' in patch) ? 'conflict.edit' : undefined);
+      const refreshed = await refreshTasks();
+      const editConflict = result.error.code === 'CONFLICT' && !('status' in patch);
+      fail(result, !refreshed ? (editConflict ? 'conflict.refreshFailed' : 'error.ipc')
+        : editConflict ? 'conflict.edit' : undefined);
     } else if (!(result.error.code === 'VALIDATION_ERROR' && result.error.field)) {
       fail(result);
     }
@@ -97,8 +102,8 @@ export function useReminder(api: ReminderApi | null) {
       replace(result.data);
       setNotice({ tone: 'success', key: 'undo.done' });
     } else if (result.error.code === 'CONFLICT' || result.error.code === 'NOT_FOUND') {
-      await refreshTasks();
-      fail(result, result.error.code === 'CONFLICT' ? 'undo.conflict' : undefined);
+      const refreshed = await refreshTasks();
+      fail(result, !refreshed ? 'undo.conflictRefreshFailed' : result.error.code === 'CONFLICT' ? 'undo.conflict' : undefined);
     } else {
       // Keep the Undo available so the user can retry after a transient failure.
       setNotice({ tone: 'error', key: errorKey(result.error), undo: entry });

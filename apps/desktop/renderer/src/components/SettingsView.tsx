@@ -12,8 +12,9 @@ interface Props {
 const locales: Locale[] = ['en-US', 'zh-CN'];
 
 function timeZones(current: string): string[] {
+  // supportedValuesOf omits UTC; keep it (and the saved zone) selectable.
   const zones = Intl.supportedValuesOf('timeZone');
-  return zones.includes(current) ? zones : [current, ...zones];
+  return [...new Set(['UTC', current, ...zones])];
 }
 
 export function SettingsView({ settings, busy, onChange }: Props) {
