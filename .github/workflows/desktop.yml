@@ -1,0 +1,72 @@
+name: Desktop integration
+on:
+  push:
+    branches: [main, codex/rem-001-integration]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  desktop:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.16.0'
+      - name: Install pinned desktop runtime
+        run: npm install --registry=https://registry.npmjs.org
+      - name: Backend tests
+        run: npm test
+      - name: Install renderer
+        working-directory: apps/desktop/renderer
+        run: npm ci --registry=https://registry.npmjs.org
+      - name: Renderer tests
+        working-directory: apps/desktop/renderer
+        run: npm test
+      - name: Typecheck
+        working-directory: apps/desktop/renderer
+        run: npm run typecheck
+      - name: Build renderer
+        working-directory: apps/desktop/renderer
+        run: npm run build
+      - name: Diagnose installed Electron executable
+        shell: pwsh
+        run: |
+          @'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const { spawnSync } = require('node:child_process');
+          const exe = require('electron');
+          const paths = [exe, 'apps/desktop/main/main.mjs', 'apps/desktop/renderer/dist/index.html'];
+          for (const p of paths) console.log({path:path.resolve(p),exists:fs.existsSync(p),size:fs.existsSync(p)?fs.statSync(p).size:null});
+          const fd=fs.openSync(exe,'r'), magic=Buffer.alloc(2); fs.readSync(fd,magic,0,2,0);fs.closeSync(fd);
+          console.log({magic:magic.toString('hex'),comspec:process.env.ComSpec,runAsNode:Boolean(process.env.ELECTRON_RUN_AS_NODE)});
+          const result=spawnSync(exe,['--version'],{encoding:'utf8',windowsHide:true,timeout:15000});
+          console.log({status:result.status,signal:result.signal,error:result.error?.message,stdout:result.stdout,stderr:result.stderr});
+          '@ | node
+      - name: Real Electron restart and persistence
+        working-directory: apps/desktop/renderer
+        shell: pwsh
+        env:
+          DEBUG: pw:browser
+        run: |
+          npm run e2e 2>&1 | Tee-Object -FilePath desktop-e2e.log
+          exit $LASTEXITCODE
+      - name: Preserve verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-verification-${{ github.sha }}
+          path: |
+            package-lock.json
+            apps/desktop/renderer/desktop-e2e.log
+          retention-days: 7
+      - name: Preserve screenshots from a successful desktop run
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-screenshots-${{ github.sha }}
+          path: apps/desktop/renderer/docs/evidence/*.png
+          retention-days: 7
