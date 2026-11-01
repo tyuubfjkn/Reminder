@@ -1,4 +1,30 @@
 # Reminder API 1.0.0
+Manual protocol v1 remains unchanged. REM-002 adds the optional `window.reminder.assistant` capability, with its own `apiVersion: '1.0.0'`; all declarations remain in the single canonical file below.
+
+## Assistant v1 (REM-002)
+All four methods return `Promise<AssistantResult<T>>`. No provider secret is returned. Main-process IPC validates the same sender/frame/origin as manual methods.
+
+| Method | Input | Data |
+| --- | --- | --- |
+| assistant.getConfig() | omitted | `{provider:'deepseek',model:'deepseek-flash',hasKey:false}` |
+| assistant.configure(input) | `{model?,apiKey?,clearKey?}`; nonempty patch; key and clearKey are mutually exclusive | masked AssistantConfig |
+| assistant.submit(input) | `{requestId,text,conversationId?,choice?}` | AssistantReply |
+| assistant.undo(input) | `{requestId}` of the original applied batch | AssistantReply with outcome undone |
+
+The UI creates a UUID per send and retains exactly the same input/requestId on transport retry. A new message or clarification answer uses a new requestId. Same ID/different input returns CONFLICT. `conversationId` comes from the previous reply; conversation history is memory-only with 30-minute expiry. A structured `choice` is accepted only for the last matching clarification; submit a short textual answer too. An expired conversation returns AI_CONVERSATION_EXPIRED: retain the user's text and offer a new conversation explicitly.
+
+AssistantReply always contains requestId,conversationId,language,outcome,message,changes,undoAvailable. Outcomes: applied,clarification,unsupported,undone. Optional choices are task candidates or first/second occurrence UTC instants with timezone; CC formats offsets for the user. A clarification/unsupported reply changes no tasks. Successful receipt wording comes from committed local changes, not arbitrary model prose. On applied/undone, reload tasks.list; if reload fails, do not claim the latest list is displayed. Never use a historical receipt to replace newer task data. Undo may conflict if any affected task changed later. Repeated Undo and request replay are idempotent; replay after Undo returns undone.
+
+Example (illustrative contract data, not a captured live model result):
+```json
+{"requestId":"e6cd593e-6390-4c29-bf7c-8fcc5926396e","text":"Finish my essay by Friday. It should take about three hours."}
+```
+The service supplies the actual clock, saved timezone and OS region to DeepSeek. Do not hardcode Friday or infer a US timezone from English. A date-only deadline stays date-only; local exact times are resolved by the application, and DST gaps/folds can require clarification.
+
+Error codes in addition to manual v1: AI_NOT_CONFIGURED (enter key), AI_CONFIG_ERROR (stored config invalid/unreadable), AI_SECURE_STORAGE_UNAVAILABLE (no encrypted save possible), AI_AUTH_ERROR, AI_RATE_LIMITED, AI_UNAVAILABLE, AI_TIMEOUT, AI_INVALID_RESPONSE, AI_CONTEXT_LIMIT, AI_CONVERSATION_EXPIRED, AI_BUSY. All are sanitized; no raw provider body, key, SQL or local path reaches the renderer. Failed/unsupported interpretation applies no task changes. CONFLICT includes stale task/settings snapshots and request-ID misuse. Do not automatically resend a paid provider request; provide explicit retry.
+
+Limits: 4000 input units,20 operations,200 contextual tasks,256KiB provider response,30s timeout. Local schema v2 is required for receipts/atomic undo. Key storage is encrypted under Windows through Electron asynchronous safeStorage. Only the current message, bounded history and task context (excluding notes) are sent; explain this to users. No live provider claim until a real credential-backed smoke passes.
+
 Authority: packages/contracts/api-v1.d.ts. Shared design: docs/superpowers/specs/2026-10-31-reminder-design.md.
 
 ## Transport and operations

@@ -38,6 +38,8 @@ export type Result<T> = { ok: true; data: T } |
   { ok: false; error: { code: ErrorCode; field?: string } };
 export interface ReminderApi {
   readonly apiVersion: '1.0.0';
+  /** Additive REM-002 capability. Older manual-only builds may omit it. */
+  assistant?: AssistantApi;
   tasks: {
     list(): Promise<Result<Task[]>>;
     create(input: CreateTask): Promise<Result<Task>>;
@@ -47,5 +49,42 @@ export interface ReminderApi {
     get(): Promise<Result<Settings>>;
     update(input: UpdateSettings): Promise<Result<Settings>>;
   };
+}
+
+export type AssistantErrorCode = ErrorCode | 'AI_NOT_CONFIGURED' | 'AI_CONFIG_ERROR' |
+  'AI_SECURE_STORAGE_UNAVAILABLE' | 'AI_AUTH_ERROR' | 'AI_RATE_LIMITED' |
+  'AI_UNAVAILABLE' | 'AI_TIMEOUT' | 'AI_INVALID_RESPONSE' | 'AI_CONTEXT_LIMIT' |
+  'AI_CONVERSATION_EXPIRED' | 'AI_BUSY';
+export type AssistantResult<T> = { ok: true; data: T } |
+  { ok: false; error: { code: AssistantErrorCode; field?: string } };
+export interface AssistantConfig { provider: 'deepseek'; model: string; hasKey: boolean }
+export interface ConfigureAssistant { model?: string; apiKey?: string; clearKey?: boolean }
+export interface AssistantInput {
+  requestId: string;
+  text: string;
+  conversationId?: string;
+  choice?: { taskId?: string; occurrence?: 'earlier' | 'later' };
+}
+export interface AssistantChange { kind: 'created' | 'updated' | 'removed' | 'restored'; taskId: string; title: string }
+export type AssistantChoices =
+  | { kind: 'task'; tasks: Array<{ id: string; title: string; status: TaskStatus; deadline: Deadline | null }> }
+  | { kind: 'occurrence'; earlier: string; later: string; timeZone: string };
+export interface AssistantReply {
+  requestId: string;
+  conversationId: string;
+  language: Locale;
+  outcome: 'applied' | 'clarification' | 'unsupported' | 'undone';
+  message: string;
+  changes: AssistantChange[];
+  undoAvailable: boolean;
+  choices?: AssistantChoices;
+  replayed?: boolean;
+}
+export interface AssistantApi {
+  readonly apiVersion: '1.0.0';
+  getConfig(): Promise<AssistantResult<AssistantConfig>>;
+  configure(input: ConfigureAssistant): Promise<AssistantResult<AssistantConfig>>;
+  submit(input: AssistantInput): Promise<AssistantResult<AssistantReply>>;
+  undo(input: { requestId: string }): Promise<AssistantResult<AssistantReply>>;
 }
 declare global { interface Window { reminder: ReminderApi } }
