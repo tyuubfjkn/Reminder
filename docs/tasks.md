@@ -10,7 +10,7 @@ Initial baseline: 4b7592e7dd0e9fe49c8e0b0a014830a31682272d. Frozen BE/IPC baseli
 | REM-001-INT | Complete Windows application loop | Codex | CC PR + BE | integration tooling/docs, coordinated fixes | Source desktop loop passed on ae93769; CI workflow/evidence delivered in PR #3; installer/release excluded |
 | REM-001-FE-01 | Accurate settings conflict feedback when reload fails | CC | REM-001-FE; baseline d7ae2e41392a433ec8b38067d30617dd2c75d265 | apps/desktop/renderer/** | Follow-up: failed settings.get after CONFLICT must not claim latest settings loaded; localized regression test required; API v1 unchanged |
 | REM-002 | Bilingual natural-language tasks | Codex + CC | REM-001-INT | Future card | Not started |
-| REM-003 | Explicit, reliable reminders | Codex + CC | REM-001-INT | Future card | Running/closed/sleep behavior verified; not started |
+| REM-003 | Explicit, reliable reminders | Codex + CC | REM-001-INT | Future card | Running/closed/sleep verification required; not started |
 | REM-004 | Deadline-respecting scheduling | Codex + CC | Task/time model | Future card | Not started |
 | REM-005 | Recurrence instances | Codex + CC | Task/reminder model | Future card | Not started |
 | REM-006 | Accounts and sync | Codex + CC | Sync design | Future card | Not started |
