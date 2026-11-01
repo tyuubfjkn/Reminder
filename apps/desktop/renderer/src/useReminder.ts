@@ -148,7 +148,7 @@ export function useReminder(api: ReminderApi | null) {
 
   return {
     phase, settings, tasks, notice, busyIds, settingsBusy,
-    load, createTask, updateTask, undo, updateSettings, retrySettingsReload,
+    load, createTask, updateTask, undo, updateSettings, retrySettingsReload, reloadTasks: refreshTasks,
     dismissNotice: () => setNotice(null)
   };
 }

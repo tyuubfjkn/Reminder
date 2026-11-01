@@ -6,8 +6,12 @@ import { useReminder, type Notice, type UndoEntry } from './useReminder';
 import { TaskForm, type EditorStash, type EditorState } from './components/TaskForm';
 import { TaskItem } from './components/TaskItem';
 import { SettingsView } from './components/SettingsView';
+import { AssistantView } from './components/AssistantView';
+import { AssistantSettings } from './components/AssistantSettings';
+import { getAssistant } from './api/client';
+import { useAssistant } from './useAssistant';
 
-type View = 'tasks' | 'settings';
+type View = 'tasks' | 'assistant' | 'settings';
 
 export function App({ api }: { api: ReminderApi | null }) {
   const state = useReminder(api);
@@ -26,14 +30,18 @@ export function App({ api }: { api: ReminderApi | null }) {
           {phase.reason === 'error' && <button type="button" className="primary" onClick={() => void state.load()}>{i18n.t('action.retry')}</button>}
         </section>
       )}
-      {phase.kind === 'ready' && settings && <Ready state={state} />}
+      {phase.kind === 'ready' && settings && <Ready state={state} api={api} />}
     </I18nProvider>
   );
 }
 
-function Ready({ state }: { state: ReturnType<typeof useReminder> }) {
+function Ready({ state, api }: { state: ReturnType<typeof useReminder>; api: ReminderApi | null }) {
   const { t, timeZone } = useI18n();
   const [view, setView] = useState<View>('tasks');
+  // Optional REM-002 capability: manual-only bridges keep the original app.
+  const assistantApi = useMemo(() => getAssistant(api), [api]);
+  const ai = useAssistant(assistantApi, state.reloadTasks);
+  const views: View[] = ai.available ? ['tasks', 'assistant', 'settings'] : ['tasks', 'settings'];
   const [editingId, setEditing] = useState<string | null>(null);
   // Lives above both lists: a refresh that moves the task to the other list must not drop the draft.
   const editor = useRef<EditorState | undefined>(undefined);
@@ -92,7 +100,7 @@ function Ready({ state }: { state: ReturnType<typeof useReminder> }) {
       <header className="topbar">
         <span className="brand">{t('app.name')}</span>
         <nav aria-label={t('nav.label')}>
-          {(['tasks', 'settings'] as View[]).map(v => (
+          {views.map(v => (
             <button key={v} type="button" className="nav-item" aria-current={view === v ? 'page' : undefined} onClick={() => setView(v)}>
               {t(`nav.${v}`)}
             </button>
@@ -105,7 +113,11 @@ function Ready({ state }: { state: ReturnType<typeof useReminder> }) {
 
       <main className="content">
         {view === 'settings' ? (
-          <SettingsView settings={state.settings!} busy={state.settingsBusy} onChange={patch => void state.updateSettings(patch)} />
+          <SettingsView settings={state.settings!} busy={state.settingsBusy} onChange={patch => void state.updateSettings(patch)}>
+            <AssistantSettings state={ai.available ? ai : null} />
+          </SettingsView>
+        ) : view === 'assistant' ? (
+          <AssistantView state={ai} onOpenSettings={() => setView('settings')} />
         ) : (
           <>
             <h1 className="visually-hidden">{t('nav.tasks')}</h1>

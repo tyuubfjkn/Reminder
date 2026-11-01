@@ -54,6 +54,19 @@ await page.setViewportSize?.({ width: 1100, height: 760 });
 await shot(page, '01-first-launch-empty-en');
 log('1 fresh launch: English empty state on zh-CN Chromium locale');
 
+// REM-002 compatibility: the assistant is optional. Without it in the bridge, the manual app is unchanged.
+const hasAssistant = await page.evaluate(() => typeof window.reminder.assistant === 'object' && window.reminder.assistant !== null);
+if (!hasAssistant) {
+  assert.equal(await page.getByRole('button', { name: 'Assistant' }).count(), 0, 'no Assistant nav without the capability');
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByText('The assistant isn’t available in this version of Reminder.').waitFor();
+  await page.getByRole('button', { name: 'Tasks' }).click();
+  log('REM-002 compat: bridge has no assistant -> Assistant hidden, manual UI unchanged');
+} else {
+  await page.getByRole('button', { name: 'Assistant' }).waitFor();
+  log('REM-002: bridge exposes assistant -> Assistant nav shown (no provider calls made by this script)');
+}
+
 // Fix a known timezone for deterministic evidence; it is independent of language.
 await page.getByRole('button', { name: 'Settings' }).click();
 await page.getByRole('combobox', { name: 'Time zone' }).selectOption('Asia/Shanghai');

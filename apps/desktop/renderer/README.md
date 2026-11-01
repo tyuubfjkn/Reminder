@@ -79,6 +79,29 @@ Mock-only evidence (fixture failure injection): 6 regression tests, en-US and zh
 promise, retry by choosing again}, seen failing before the fix (the old copy claimed "The latest saved settings are shown") and
 passing after it. The real backend can't be made to fail `settings.get` on demand, so this path has no real-Electron evidence.
 
+### REM-002-FE: assistant UI (optional capability)
+The renderer feature-detects `window.reminder.assistant` (assistant v1.0.0, `getAssistant()` in `src/api/client.ts`). Without
+it, there is no Assistant tab, Settings says the assistant isn't available, and the manual app is unchanged. With it:
+- **Assistant tab** (`src/components/AssistantView.tsx`, state in `src/useAssistant.ts`): a conversation with the service's
+  replies. Applied/undone replies show "Changes saved"/"Changes undone" with the change list. Clarification and unsupported
+  replies are labeled "No changes made". Task choices show title, status and deadline. DST occurrence choices show local time,
+  UTC offset and zone. Reply text gets `lang` from `reply.language`. The renderer never interprets or executes operations.
+- **Request IDs:** each new message or clarification answer gets `crypto.randomUUID()`. After a failure the text is kept, and
+  **Try again** (or Send with unchanged text) resends the identical input with the same ID. Editing the text makes a new request.
+  Nothing is resent automatically. The conversation ID comes from the last reply. `AI_CONVERSATION_EXPIRED` requires an
+  explicit **New conversation** and keeps the text.
+- **After applied/undone** the real `tasks.list()` is reloaded. Receipt data never replaces tasks. A failed reload says so and
+  offers **Reload tasks**. **Undo these changes** sends `undo({requestId})` for the whole batch. On `CONFLICT` the list is
+  reloaded and nothing is overwritten. On a transient failure Undo stays available.
+- **AI settings** (`src/components/AssistantSettings.tsx`): key status and model, a write-only password field cleared after a
+  successful save (kept on failure), replace/remove key, model change, and a disclosure of what is sent to DeepSeek. Config
+  errors (`AI_CONFIG_ERROR`, `AI_SECURE_STORAGE_UNAVAILABLE`) are shown without affecting tasks; a broken config can be removed.
+- All copy is in en-US and zh-CN, including every assistant error code.
+
+Evidence boundaries: the assistant backend wasn't published at the planning commit, so assistant behavior is covered only by
+the scripted test fixture `src/test/fakeAssistant.ts` (**mock tests**, 26 in `src/assistant.test.tsx`). Real Electron runs only
+show the manual app is unchanged when the bridge has no assistant. There is no real IPC, DPAPI or DeepSeek evidence yet.
+
 ## Known limitations
 - Native `<input type="date|time">` pickers display in Chromium's OS or `--lang` format (for example `06/11/2026`), not the
   app's language. The saved value is always ISO `YYYY-MM-DD`. A custom localized date picker could be a later UI task.

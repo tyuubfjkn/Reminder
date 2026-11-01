@@ -77,6 +77,11 @@ export function formatDeadline(deadline: Deadline, locale: Locale, displayTimeZo
   return formatInstant(deadline.at, locale, displayTimeZone);
 }
 
+/** An instant as local wall time in `timeZone`, without a zone name (callers add offset and zone). */
+export function formatWallTime(at: string, locale: Locale, timeZone: string): string {
+  return new Intl.DateTimeFormat(locale, { ...dateOptions, hour: 'numeric', minute: '2-digit', timeZone }).format(new Date(at));
+}
+
 export function formatInstant(at: string, locale: Locale, displayTimeZone: string): string {
   return new Intl.DateTimeFormat(locale, {
     ...dateOptions, hour: 'numeric', minute: '2-digit', timeZone: displayTimeZone, timeZoneName: 'short'

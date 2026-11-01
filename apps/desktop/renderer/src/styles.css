@@ -63,7 +63,7 @@ button.ghost { border-color: transparent; background: transparent; color: var(--
 button.link { align-self: flex-start; border: 0; background: none; padding: 2px 0; color: var(--accent); }
 button.link:hover:not(:disabled) { background: none; text-decoration: underline; }
 
-input[type="text"], input[type="number"], input[type="date"], input[type="time"], select, textarea {
+input[type="text"], input[type="password"], input[type="number"], input[type="date"], input[type="time"], select, textarea {
   width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px;
 }
 textarea { resize: vertical; min-height: 64px; }
@@ -153,3 +153,43 @@ fieldset { border: 0; padding: 0; margin: 0; }
   .topbar, .content, .notices { padding-left: 14px; padding-right: 14px; }
   .title-row { flex-direction: column; align-items: stretch; }
 }
+
+/* REM-002 assistant */
+.assistant { display: flex; flex-direction: column; gap: 10px; }
+.assistant h1 { font-size: 22px; margin: 4px 0 0; }
+.assistant > .hint { max-width: 68ch; }
+.assistant-gate {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 8px; padding: 14px 16px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.assistant-gate p { margin: 0; flex: 1 1 260px; }
+.conversation { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.conversation-empty { padding: 16px 0; }
+.bubble {
+  max-width: min(640px, 92%); padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border);
+  background: var(--surface); display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
+}
+.bubble.user { align-self: flex-end; background: var(--accent-soft); border-color: transparent; }
+.bubble.reply { align-self: flex-start; }
+.bubble-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.receipt-title { margin: 0; font-weight: 600; font-size: 13px; color: var(--muted); }
+.outcome-applied .receipt-title { color: inherit; }
+.badge.no-changes { margin: 0; font-size: 12.5px; color: var(--muted); }
+.changes { margin: 0; padding-left: 18px; font-size: 13.5px; }
+.changes li { overflow-wrap: anywhere; }
+.choices { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.choices > .hint { flex-basis: 100%; }
+.choices button { white-space: normal; text-align: left; }
+.composer {
+  margin-top: 6px; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.composer textarea { resize: vertical; min-height: 72px; }
+.composer textarea[readonly] { opacity: 0.75; }
+.composer-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.ai-settings { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; padding-top: 18px; border-top: 1px solid var(--border); }
+.ai-settings h2 { font-size: 17px; margin: 0; }
+.ai-status { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; font-size: 14px; }
+.ai-row { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.ai-row .field { flex: 1 1 260px; }
+.ai-row > button { margin-top: 24px; }
