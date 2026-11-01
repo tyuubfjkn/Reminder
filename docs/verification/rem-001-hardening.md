@@ -13,7 +13,7 @@ Canonical baseline: e26220c1af15fee913b97dbc385ed5287fd332f1. PR #4, branch code
 - CI evidence artifacts from that run: verification 13069358687; fresh screenshots 13069498447. Seven-day retention. Successful screenshots are not inferred from checked-in images.
 
 ## Boundaries and remaining work
-- Settings conflict/reload copy REM-001-FE-01 remains CC-owned and pending its PR. Published task package: docs/handoffs/REM-001-FE-01.md, planning commit cd1eaa070fa03b045998c91d513020055f3dc664. No automatic CC dispatch or frontend fix is claimed.
+- Settings conflict/reload copy REM-001-FE-01 is complete through CC PR #5. Its specific failure path is fixture-tested as detailed below; no real-Electron failure injection is claimed.
 - Renderer failure-state tests are still fixture-based. Actual ENOSPC/ACL probes exercise the backend against a real filesystem, not a UI interaction on the full disk. No sudden-power-loss or physical hardware fault claim is made.
 - Native picker format follows OS/Chromium locale. Installer, notification, AI and sync work are excluded. Packaged-app profile override behavior is unit-verified; no packaged build exists yet.
 - Direct legacy renderer E2E remains unsafe for personal profiles; use root `npm run test:desktop`. A follow-up renderer tooling change must retain this isolation.
@@ -21,3 +21,13 @@ Canonical baseline: e26220c1af15fee913b97dbc385ed5287fd332f1. PR #4, branch code
 
 ## Rollback
 Revert the PR #4 merge through a reviewed PR if required. No schema change or data migration is introduced. Clear REMINDER_USER_DATA_DIR to return to the ordinary development profile; do not remove user databases. The test runner only removes the unique directory it creates, and VHD probes run only on disposable hosted runners.
+
+## Cleanup closeout: REM-001-FE-01
+
+CC PR #5 head `8aef54c7d6483bbd0be6d8e5d16ad4c1b1820738` was reviewed by Codex and merged as `505f886ed295ddb2f56dc07f52196874cefa51a7`. Only five renderer files changed. Failed settings reload now retains last known settings, displays accurate en-US/zh-CN feedback and offers explicit retry; successful refresh and revision checks remain intact. Shared API/design versions did not change.
+
+CC reported six regression cases RED before the fix and a mutation check. Codex inspected the patches and assertions. Independent CI [41273495145](https://github.com/tyuubfjkn/Reminder/actions/runs/41273495145), job 124750887908, tested the combination with main `f955405` (actual merge checkout `0ea990ecad31343774a2d920add3f7856c832918`): 21 backend/tool tests, 64 renderer tests, typecheck/build, actual VHD/ACL probes, dual real Electron profiles and full restart/persistence E2E all passed. Backend push run 41273472114 and PR run 41273495231 also passed. The conflict-then-read-failure assertions themselves use the fixture; the real E2E establishes that the combined desktop loop still works.
+
+PR #4's final root npm ci and full integration passed run 41273019591 at head f3bf946 (actual checkout ee3dff00316a996b2f5c70cd83d4eaf2f8e952ef). Its independent review found no blocking issues. Deferred minor REM-001-INT-02 is extra coverage of the root command's exit status, not a demonstrated product defect.
+
+The authorized cleanup tasks are complete. Packaging/installer, notification and other future features remain separate work. This closeout changes documentation only; it introduces no runtime or API change. Revert PR #5 through a reviewed PR if necessary; preserve databases and schema v1.

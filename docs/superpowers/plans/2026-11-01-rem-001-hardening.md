@@ -24,25 +24,29 @@
 ### Task 1: REM-001-INT-01 isolated profile and locked runtime (Codex)
 Files: apps/desktop/main/profile.mjs (new), main.mjs; packages/backend/test/profile.test.mjs (new); tools/run-desktop-e2e.mjs and tools/profile-probe.mjs (new); root package.json/package-lock.json; .github/workflows/desktop.yml; README.md.
 Interface: configureUserData(app, override) sets userData/sessionData before lock/ready; returns chosen directory or undefined. REMINDER_USER_DATA_DIR is development-only and absolute. Runner uses a new temporary directory, verifies real Electron paths, launches existing renderer E2E, preserves nonzero exit status, then removes only its own directory.
-- [ ] Write behavioral tests for default/absolute/relative/empty/packaged/failed-directory creation; run RED.
-- [ ] Implement minimal profile configuration and wire real main; run npm test GREEN.
-- [ ] Generate npm lock on network-enabled CI, capture exact bytes; commit and verify npm ci.
-- [ ] Run real profile probe (including independent simultaneous profiles), full renderer E2E and cleanup failure path on Windows; capture evidence and commit.
+- [x] Write behavioral tests for default/absolute/relative/empty/packaged/failed-directory creation; run RED.
+- [x] Implement minimal profile configuration and wire real main; run npm test GREEN.
+- [x] Generate npm lock on network-enabled CI, capture exact bytes; commit and verify npm ci.
+- [x] Run real profile probe (including independent simultaneous profiles), full renderer E2E and cleanup failure path on Windows; capture evidence and commit.
 
 ### Task 2: REM-001-BE-01 real storage fault validation (Codex)
 Files: tools/storage-faults.ps1 and tools/storage-faults.mjs (new), workflow, backend tests/store only if reproduced defects require fixes.
 Interface: PowerShell creates/attaches only its unique 64 MiB VHD, validates drive identity, invokes Node probe, restores ACL/detaches in finally. Node operates only in the supplied marked fixture.
-- [ ] On a temporary database, deny write access; confirm an independent raw write actually fails, openStore returns STORAGE_ERROR, and reopening after ACL restoration preserves contents.
-- [ ] Fill the dedicated VHD to actual ENOSPC, invoke real task create/update/settings update through dispatcher, assert sanitized failure and no partial revision/content changes.
-- [ ] Release filler, reopen and compare records/settings; verify a subsequent explicit write succeeds. Run in Windows CI; never label a skipped or simulated test as verified.
-- [ ] If production fails assertions, record RED, fix only the root cause, rerun whole backend suite and fault test. Commit evidence.
+- [x] On a temporary database, deny write access; confirm an independent raw write actually fails, openStore returns STORAGE_ERROR, and reopening after ACL restoration preserves contents.
+- [x] Fill the dedicated VHD to actual ENOSPC, invoke real task create/update/settings update through dispatcher, assert sanitized failure and no partial revision/content changes.
+- [x] Release filler, reopen and compare records/settings; verify a subsequent explicit write succeeds. Run in Windows CI; never label a skipped or simulated test as verified.
+- [x] If production fails assertions, record RED, fix only the root cause, rerun whole backend suite and fault test. Commit evidence.
 
 ### Task 3: REM-001-FE-01 settings conflict feedback (CC)
 Files: apps/desktop/renderer/** only. Consumes unchanged settings.get/update Result contract.
-- [ ] Publish shared design/plan/handoff first and supply exact commit to CC.
-- [ ] CC reproduces CONFLICT + failing reload (Result error and thrown promise); localized error says latest settings could not load, old settings remain. Successful reload still adopts latest settings.
-- [ ] CC runs renderer suite/typecheck/build and PRs to main. Codex reviews concrete head, combines with hardened main, verifies and merges. If CC cannot be called, provide the published handoff for forwarding and accurately leave this task pending.
+- [x] Publish shared design/plan/handoff first and supply exact commit to CC.
+- [x] CC reproduces CONFLICT + failing reload (Result error and thrown promise); localized error says latest settings could not load, old settings remain. Successful reload still adopts latest settings.
+- [x] CC runs renderer suite/typecheck/build and PRs to main. Codex reviews concrete head, combines with hardened main, verifies and merges. If CC cannot be called, provide the published handoff for forwarding and accurately leave this task pending.
 
 ### Delivery
-- [ ] Independent review, fix important findings with RED/GREEN evidence, verify final-head CI, merge authorized PR.
-- [ ] Update docs/tasks.md and docs/verification/rem-001-hardening.md with separate mock/backend/real desktop results and remaining limitations.
+- [x] Independent review, fix important findings with RED/GREEN evidence, verify final-head CI, merge authorized PR.
+- [x] Update docs/tasks.md and docs/verification/rem-001-hardening.md with separate mock/backend/real desktop results and remaining limitations.
+
+## Completion record
+
+Tasks 1–2 delivered in PR #4 (final full CI 41273019591). Task 3 delivered in PR #5 (combined full CI 41273495145). Codex inspected CC's concrete commit; CC's reported RED/mutation evidence is distinct from CI's independently observed GREEN tests. No production storage defect was found, so the conditional backend-fix step required no code change. Deferred non-blocking coverage: REM-001-INT-02. Scope and evidence limits are in docs/verification/rem-001-hardening.md.
