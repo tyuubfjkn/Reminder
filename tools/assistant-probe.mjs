@@ -40,7 +40,7 @@ await withIsolatedProfile(async profile=>{
     });
     const request={requestId:randomUUID(),text:'Create an essay due on April 15, 2027, estimated at three hours.'};
     const applied=await page.evaluate(input=>window.reminder.assistant.submit(input),request);
-    assert.equal(applied.ok,true);assert.equal(applied.data.outcome,'applied');
+    assert.equal(applied.ok,true,applied.error?.code);assert.equal(applied.data.outcome,'applied');
     assert.equal((await page.evaluate(()=>window.reminder.tasks.list())).data[0].estimatedMinutes,180);
     await app.close();app=null;
     app=await launch();page=await app.firstWindow();

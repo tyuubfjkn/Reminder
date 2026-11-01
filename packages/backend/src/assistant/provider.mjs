@@ -1,7 +1,7 @@
 import { AppError } from '../errors.mjs';
 import { intentTool, validateIntent } from './schema.mjs';
 
-export function createDeepSeekProvider({fetchImpl=fetch,timeoutMs=30000}={}) {
+export function createDeepSeekProvider({fetchImpl=(...args)=>globalThis.fetch(...args),timeoutMs=30000}={}) {
   return {async propose({apiKey,model,messages}) {
     const controller=new AbortController();
     let timer,reader;

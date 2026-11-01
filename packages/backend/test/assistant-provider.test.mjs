@@ -34,3 +34,11 @@ test('bounded streamed body and abort deadline reject without hanging',async()=>
   const stream=new ReadableStream({start(c){c.enqueue(new TextEncoder().encode('{'));}});
   await assert.rejects(provider(async()=>new Response(stream),15).propose(input),e=>e.code==='AI_TIMEOUT');
 });
+
+test('default transport can be intercepted by the isolated Electron test driver after startup',async t=>{
+  const original=globalThis.fetch;t.after(()=>{globalThis.fetch=original;});
+  globalThis.fetch=async()=>{throw Error('original transport must not be used');};
+  const p=module.createDeepSeekProvider();
+  let calls=0;globalThis.fetch=async()=>{calls++;return response();};
+  assert.deepEqual(await p.propose(input),valid);assert.equal(calls,1);
+});
