@@ -34,6 +34,8 @@ jobs:
       - name: Real Electron restart and persistence
         working-directory: apps/desktop/renderer
         shell: pwsh
+        env:
+          DEBUG: pw:browser
         run: |
           npm run e2e 2>&1 | Tee-Object -FilePath desktop-e2e.log
           exit $LASTEXITCODE
@@ -45,5 +47,11 @@ jobs:
           path: |
             package-lock.json
             apps/desktop/renderer/desktop-e2e.log
-            apps/desktop/renderer/docs/evidence/*.png
+          retention-days: 7
+      - name: Preserve screenshots from a successful desktop run
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-screenshots-${{ github.sha }}
+          path: apps/desktop/renderer/docs/evidence/*.png
           retention-days: 7
