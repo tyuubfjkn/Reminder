@@ -63,7 +63,8 @@ export function useAssistant(assistant: AssistantApi | null, reloadTasks: () => 
     if (!(await reloadTasks())) setNotice({ key: 'assistant.reloadFailed', action: 'reloadTasks' });
   }, [reloadTasks]);
 
-  const run = useCallback(async (input: AssistantInput, userText: string): Promise<boolean> => {
+  /** `submittedDraft` is the raw composer text this request came from; it is cleared only if still unchanged. */
+  const run = useCallback(async (input: AssistantInput, userText: string, submittedDraft?: string): Promise<boolean> => {
     if (!assistant || inFlight.current) return false;
     inFlight.current = true;
     setPending({ input, phase: 'sending' });
@@ -86,26 +87,36 @@ export function useAssistant(assistant: AssistantApi | null, reloadTasks: () => 
       { kind: 'reply', key: `${input.requestId}:reply`, reply: data,
         undo: data.outcome === 'applied' && data.undoAvailable ? 'available' : 'unavailable' }
     ]);
-    if (input.text === userText && !input.choice) setDraft(d => (d === userText ? '' : d));
+    if (submittedDraft !== undefined) setDraft(d => (d === submittedDraft ? '' : d));
     if (data.outcome === 'applied' || data.outcome === 'undone') await afterCommit();
     return true;
   }, [assistant, afterCommit]);
 
-  /** Send text. Unchanged text after a failure is the same request, so it reuses that requestId. */
-  const send = useCallback((text: string) => {
+  /**
+   * Send composer text. Text is trimmed here, once. Text that is unchanged (after trimming) since a failure is
+   * the same request, so it reuses that requestId; a committed but unacknowledged request can't apply twice.
+   */
+  const send = useCallback((draftText: string) => {
+    const text = draftText.trim();
+    if (!text) return Promise.resolve(false);
     if (pending?.phase === 'failed' && !pending.input.choice && pending.input.text === text) {
-      return run(pending.input, text);
+      return run(pending.input, text, draftText);
     }
     return run({
       requestId: crypto.randomUUID(), text,
       ...(conversationId ? { conversationId } : {})
-    }, text);
+    }, text, draftText);
   }, [pending, conversationId, run]);
 
-  /** Answer the latest clarification with a structured choice plus a short text answer. */
-  const answer = useCallback((text: string, choice: NonNullable<AssistantInput['choice']>) => run({
-    requestId: crypto.randomUUID(), text, ...(conversationId ? { conversationId } : {}), choice
-  }, text), [conversationId, run]);
+  /**
+   * Answer the latest clarification with a structured choice plus a short text answer. Refused while any request
+   * is in flight or failed: a lost response may have moved the service on to a question the user hasn't seen,
+   * so only an identical retry (same requestId) may continue.
+   */
+  const answer = useCallback((text: string, choice: NonNullable<AssistantInput['choice']>) => {
+    if (pending) return Promise.resolve(false);
+    return run({ requestId: crypto.randomUUID(), text, ...(conversationId ? { conversationId } : {}), choice }, text);
+  }, [pending, conversationId, run]);
 
   const retry = useCallback(() => (pending ? run(pending.input, pending.input.text) : Promise.resolve(false)), [pending, run]);
 

@@ -26,18 +26,21 @@ export function AssistantView({ state, onOpenSettings }: Props) {
           <button type="button" className="primary" onClick={onOpenSettings}>{t('assistant.openSettings')}</button>
         </div>
       )}
-      {configState.status === 'ready' && !configState.config.hasKey && (
+      {configState.status === 'ready' && !configState.config.hasKey && state.entries.length === 0 && (
         <div className="assistant-gate">
           <p>{t('assistant.needsKey')}</p>
           <button type="button" className="primary" onClick={onOpenSettings}>{t('assistant.openSettings')}</button>
         </div>
       )}
-      {configState.status === 'ready' && configState.config.hasKey && <Conversation state={state} />}
+      {/* Without a key only new submissions are gated; history and local Undo stay available. */}
+      {configState.status === 'ready' && (configState.config.hasKey || state.entries.length > 0) && (
+        <Conversation state={state} canSend={configState.config.hasKey} onOpenSettings={onOpenSettings} />
+      )}
     </section>
   );
 }
 
-function Conversation({ state }: { state: AssistantState }) {
+function Conversation({ state, canSend, onOpenSettings }: { state: AssistantState; canSend: boolean; onOpenSettings: () => void }) {
   const { t } = useI18n();
   const id = useId();
   const [tooLong, setTooLong] = useState(false);
@@ -49,7 +52,8 @@ function Conversation({ state }: { state: AssistantState }) {
     const text = state.draft.trim();
     if (!text || sending) return;
     if (text.length > MAX_INPUT) { setTooLong(true); return; }
-    void state.send(text);
+    // The hook trims and remembers the raw draft, so a successful send clears exactly what was sent.
+    void state.send(state.draft);
   }
 
   function onKeyDown(event: KeyboardEvent) {
@@ -67,7 +71,7 @@ function Conversation({ state }: { state: AssistantState }) {
           </li>
         ) : (
           <ReplyEntry key={entry.key} entry={entry} state={state}
-            choicesEnabled={entry.key === lastReplyKey && !sending} />
+            choicesEnabled={entry.key === lastReplyKey && !state.pending && canSend} />
         ))}
       </ol>
 
@@ -87,6 +91,12 @@ function Conversation({ state }: { state: AssistantState }) {
         </div>
       )}
 
+      {!canSend ? (
+        <div className="assistant-gate">
+          <p>{t('assistant.needsKey')}</p>
+          <button type="button" className="primary" onClick={onOpenSettings}>{t('assistant.openSettings')}</button>
+        </div>
+      ) : (
       <form className="composer" onSubmit={submit} aria-busy={sending || undefined}>
         <label htmlFor={`${id}-message`} className="visually-hidden">{t('assistant.message')}</label>
         <textarea
@@ -105,6 +115,7 @@ function Conversation({ state }: { state: AssistantState }) {
           </button>
         </div>
       </form>
+      )}
     </>
   );
 }
