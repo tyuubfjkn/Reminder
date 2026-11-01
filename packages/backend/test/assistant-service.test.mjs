@@ -12,10 +12,10 @@ function fixture(t,propose,options={}) {
   return {store,service:module.createAssistantService({store,vault,provider:{propose},clock:()=>new Date('2026-11-01T12:00:00Z'),regionalLocale:'en-GB',...options})};
 }
 test('bilingual creation preserves task text/date-only and returns local receipts; replay and undo do not call provider',async t=>{
-  let calls=0;const {store,service}=fixture(t,async()=>{calls++;return {...create('��ѧ��ҵ',{deadline:{kind:'date',date:'2027-03-14'}}),language:'zh-CN'};});
-  const req=input('������ѧ��ҵ'),r=await service.submit(req);
-  assert.equal(r.ok,true);assert.equal(r.data.language,'zh-CN');assert.match(r.data.message,/�ѱ���/);
-  assert.equal(store.listTasks()[0].title,'��ѧ��ҵ');assert.deepEqual(store.listTasks()[0].deadline,{kind:'date',date:'2027-03-14',timeZone:'America/New_York'});
+  let calls=0;const {store,service}=fixture(t,async()=>{calls++;return {...create('数学作业',{deadline:{kind:'date',date:'2027-03-14'}}),language:'zh-CN'};});
+  const req=input('添加数学作业'),r=await service.submit(req);
+  assert.equal(r.ok,true);assert.equal(r.data.language,'zh-CN');assert.match(r.data.message,/已保存/);
+  assert.equal(store.listTasks()[0].title,'数学作业');assert.deepEqual(store.listTasks()[0].deadline,{kind:'date',date:'2027-03-14',timeZone:'America/New_York'});
   assert.equal((await service.submit(req)).data.replayed,true);assert.equal(calls,1);
   assert.equal((await service.submit({...req,text:'different'})).error.code,'CONFLICT');
   assert.equal((await service.undo({requestId:req.requestId})).data.outcome,'undone');assert.equal(store.listTasks().length,0);
@@ -83,4 +83,50 @@ test('missing key and context overflow leave manual task operations available',a
   const f=fixture(t,async()=>{assert.fail('must not send oversized context');});
   for(let i=0;i<201;i++) f.store.createTask({title:'Task '+i});
   assert.equal((await f.service.submit(input())).error.code,'AI_CONTEXT_LIMIT');
+});
+
+test('interleaved fold and duplicate-target choices never inherit an unrelated occurrence',async t=>{
+  let id;const deadline={kind:'local',date:'2027-11-07',time:'01:30'};
+  const {store,service}=fixture(t,async()=>({outcome:'apply',language:'en-US',operations:[
+    {kind:'create',input:{title:'Essay',deadline}},
+    {kind:'update',id,patch:{deadline}}
+  ]}));
+  id=store.createTask({title:'Math'}).id;const other=store.createTask({title:'Math'});
+  const first=(await service.submit(input())).data;
+  const second=(await service.submit(input('Second',{conversationId:first.conversationId,choice:{occurrence:'later'}}))).data;
+  assert.equal(second.choices.kind,'task');
+  const third=(await service.submit(input('This Math',{conversationId:first.conversationId,choice:{taskId:other.id}}))).data;
+  assert.equal(third.outcome,'clarification');assert.equal(third.choices.kind,'occurrence');assert.equal(store.listTasks().length,2);
+  const final=await service.submit(input('First',{conversationId:first.conversationId,choice:{occurrence:'earlier'}}));
+  assert.equal(final.data.outcome,'applied');
+  assert.equal(store.listTasks().find(t=>t.id===other.id).deadline.at,'2027-11-07T05:30:00.000Z');
+  assert.equal(store.listTasks().find(t=>t.title==='Essay').deadline.at,'2027-11-07T06:30:00.000Z');
+});
+
+test('task-set changes during model wait or clarification reject stale target resolution',async t=>{
+  let id;const f=fixture(t,async()=>{
+    f.store.createTask({title:'Math'});
+    return {outcome:'apply',language:'en-US',operations:[{kind:'update',id,patch:{status:'completed'}}]};
+  });
+  id=f.store.createTask({title:'Math'}).id;
+  assert.equal((await f.service.submit(input('Finish math'))).error?.code,'CONFLICT');
+  assert.ok(f.store.listTasks().every(t=>t.status==='pending'));
+});
+
+test('admission caps pending provider calls and resumes after capacity frees',async t=>{
+  let release;const wait=new Promise(resolve=>release=resolve);
+  const {service}=fixture(t,async()=>{await wait;return create();});
+  const requests=Array.from({length:20},()=>service.submit(input()));
+  assert.equal((await service.submit(input())).error.code,'AI_BUSY');
+  release();assert.ok((await Promise.all(requests)).every(r=>r.ok));
+  assert.equal((await service.submit(input())).ok,true);
+});
+
+test('manual rename after a choice request invalidates its original task snapshot',async t=>{
+  let id;const {store,service}=fixture(t,async()=>({outcome:'apply',language:'en-US',operations:[{kind:'update',id,patch:{status:'completed'}}]}));
+  id=store.createTask({title:'Math'}).id;const other=store.createTask({title:'Math'});
+  const first=(await service.submit(input())).data;
+  store.updateTask({id:other.id,expectedRevision:1,patch:{title:'Physics'}});
+  const selected=await service.submit(input('Original',{conversationId:first.conversationId,choice:{taskId:id}}));
+  assert.equal(selected.error.code,'CONFLICT');assert.equal(store.listTasks().find(t=>t.id===id).status,'pending');
 });

@@ -115,12 +115,18 @@ export function openStore(path, options = {}) {
       updateTask(input) { const validated=taskUpdate(input); return transaction(()=>change(validated)); },
       getAssistantRun(id,fingerprint) { return safely(()=>receipt(id,fingerprint)); },
       applyAssistantRun(input) {
-        object(input,['requestId','fingerprint','settingsRevision','reply','operations']);
+        object(input,['requestId','fingerprint','settingsRevision','taskSnapshot','reply','operations']);
         return transaction(()=>{
           const existing=receipt(input.requestId,input.fingerprint);
           if(existing) return existing;
           revision(input.settingsRevision);
           if(prefs.get().revision!==input.settingsRevision) throw new AppError('CONFLICT');
+          if(input.taskSnapshot!==undefined) {
+            const current=all.all();
+            if(!Array.isArray(input.taskSnapshot)||current.length!==input.taskSnapshot.length||
+              current.some((row,index)=>row.id!==input.taskSnapshot[index]?.id||row.revision!==input.taskSnapshot[index]?.revision))
+              throw new AppError('CONFLICT');
+          }
           if(!Array.isArray(input.operations)||input.operations.length>20) invalid('operations');
           const ids=new Set();
           const operations=input.operations.map(op=>{
@@ -140,7 +146,7 @@ export function openStore(path, options = {}) {
           const reply={...input.reply,requestId:input.requestId,changes,undoAvailable:changes.length>0};
           if(changes.length) {
             reply.outcome='applied';
-            reply.message=reply.language==='zh-CN'?`�ѱ��� ${changes.length} ��������ġ�`:`Saved ${changes.length} task change(s).`;
+            reply.message=reply.language==='zh-CN'?`已保存 ${changes.length} 项任务更改。`:`Saved ${changes.length} task change(s).`;
             delete reply.choices;
           }
           receiptInsert.run(input.requestId,input.fingerprint,JSON.stringify(reply),JSON.stringify(inverse));
@@ -164,7 +170,7 @@ export function openStore(path, options = {}) {
             changes.push({kind:before?'restored':'removed',taskId:after.id,title:before?.title??reply.changes.find(c=>c.taskId===after.id).title});
           }
           const undone={...reply,outcome:'undone',undoAvailable:false,changes,
-            message:reply.language==='zh-CN'?'�ѳ�������������ġ�':'Undid this batch of task changes.'};
+            message:reply.language==='zh-CN'?'已撤销这组任务更改。':'Undid this batch of task changes.'};
           receiptUpdate.run(JSON.stringify(undone),id);
           return undone;
         });

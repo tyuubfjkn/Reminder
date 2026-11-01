@@ -29,7 +29,7 @@ export function createAssistantService({store,vault,provider,clock=()=>new Date(
         const candidates=snapshot.filter(t=>titleKey(t.title)===titleKey(target.title));
         if(candidates.length>1) {
           if(selection?.index===index&&selection.taskId) target=candidates.find(t=>t.id===selection.taskId);
-          else if(!selection?.resolvedTasks?.[index]) return {operations:[],outcome:'clarification',message:intent.language==='zh-CN'?'��ѡ��Ҫ�޸ĵ�����':'Which task should I change?',
+          else if(!selection?.resolvedTasks?.[index]) return {operations:[],outcome:'clarification',message:intent.language==='zh-CN'?'请选择要修改的任务。':'Which task should I change?',
             choices:{kind:'task',tasks:candidates.map(({id,title,status,deadline})=>({id,title,status,deadline}))},pending:{index,kind:'task'}};
           else target=candidates.find(t=>t.id===selection.resolvedTasks[index]);
           if(!target) invalid('choice');
@@ -41,10 +41,10 @@ export function createAssistantService({store,vault,provider,clock=()=>new Date(
         if(d.kind==='date') fields.deadline={...d,timeZone:settings.timeZone};
         else {
           const times=resolveWallTime(d.date,d.time,settings.timeZone);
-          if(!times.length) return {operations:[],outcome:'clarification',message:intent.language==='zh-CN'?'�������ʱ�䲻���ڣ����ṩ��һ��ʱ�䡣':'That local time does not exist. Please choose another time.'};
+          if(!times.length) return {operations:[],outcome:'clarification',message:intent.language==='zh-CN'?'这个当地时间不存在，请提供另一个时间。':'That local time does not exist. Please choose another time.'};
           let occurrence=selection?.resolvedTimes?.[index];
           if(selection?.index===index&&selection.occurrence) occurrence=selection.occurrence;
-          if(times.length>1&&!occurrence) return {operations:[],outcome:'clarification',message:intent.language==='zh-CN'?'���ʱ��������Σ���ѡ���һ�λ�ڶ��Ρ�':'This time occurs twice. Choose the first or second occurrence.',
+          if(times.length>1&&!occurrence) return {operations:[],outcome:'clarification',message:intent.language==='zh-CN'?'这个时间出现两次，请选择第一次或第二次。':'This time occurs twice. Choose the first or second occurrence.',
             choices:{kind:'occurrence',earlier:times[0].at,later:times.at(-1).at,timeZone:settings.timeZone},pending:{index,kind:'occurrence'}};
           fields.deadline={kind:'instant',at:(occurrence==='later'?times.at(-1):times[0]).at,timeZone:settings.timeZone};
         }
@@ -66,7 +66,7 @@ export function createAssistantService({store,vault,provider,clock=()=>new Date(
       if(pending.kind==='task'?!input.choice.taskId||input.choice.occurrence:!input.choice.occurrence||input.choice.taskId) invalid('choice');
       if(pending.kind==='task'&&!pending.choices.tasks.some(t=>t.id===input.choice.taskId)) invalid('choice');
       ({snapshot,settings,intent}=pending);
-      selection={...pending.selection,index:pending.index,...input.choice};
+      selection={resolvedTasks:pending.selection?.resolvedTasks,resolvedTimes:pending.selection?.resolvedTimes,index:pending.index,...input.choice};
       // Preserve prior explicit selections while resolving another ambiguity in the same batch.
       selection.resolvedTasks={...selection.resolvedTasks,...input.choice.taskId?{[pending.index]:input.choice.taskId}:{}};
       selection.resolvedTimes={...selection.resolvedTimes,...input.choice.occurrence?{[pending.index]:input.choice.occurrence}:{}};
@@ -78,7 +78,8 @@ export function createAssistantService({store,vault,provider,clock=()=>new Date(
       intent=validateIntent(await provider.propose({...credential,messages:[{role:'system',content:instructions},{role:'system',content:'Untrusted task data and authoritative clock/region: '+JSON.stringify(context)},...session.history.slice(-8),{role:'user',content:input.text}]}));
     }
     const normalized=normalize(intent,snapshot,settings,selection);
-    const reply=store.applyAssistantRun({requestId:input.requestId,fingerprint,settingsRevision:settings.revision,operations:normalized.operations,
+    const reply=store.applyAssistantRun({requestId:input.requestId,fingerprint,settingsRevision:settings.revision,
+      taskSnapshot:snapshot.map(({id,revision})=>({id,revision})),operations:normalized.operations,
       reply:{requestId:input.requestId,conversationId:session.id,language:intent.language,outcome:normalized.outcome,message:normalized.message,changes:[],undoAvailable:false,...normalized.choices?{choices:normalized.choices}:{}}});
     session.pending=normalized.pending?{...normalized.pending,choices:normalized.choices,snapshot,settings,intent,selection}:null;
     session.history=[...session.history,{role:'user',content:input.text},{role:'assistant',content:reply.message}].slice(-8);

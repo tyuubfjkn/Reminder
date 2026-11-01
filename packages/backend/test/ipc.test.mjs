@@ -27,7 +27,7 @@ test('preload permits exactly the v1 API and routes it to real storage', async (
     assert.deepEqual(Object.keys(api.tasks).sort(),['create','list','update']);
     assert.deepEqual(Object.keys(api.settings).sort(),['get','update']);
     assert.equal(channels.size,5);
-    const created=await api.tasks.create({title:'�Ž� task'});
+    const created=await api.tasks.create({title:'桥接 task'});
     assert.equal(created.ok,true);
     assert.equal((await api.tasks.list()).data[0].id,created.data.id);
     assert.equal((await api.tasks.update({id:created.data.id,expectedRevision:1,patch:{status:'completed'}})).data.status,'completed');

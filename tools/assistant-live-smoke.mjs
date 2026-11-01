@@ -16,7 +16,7 @@ if(!process.env.DEEPSEEK_API_KEY) {
       vault:{getCredential:async()=>({apiKey:process.env.DEEPSEEK_API_KEY,model:process.env.DEEPSEEK_MODEL||'deepseek-flash'})}});
     for(const [text,language] of [
       ['Create a task named English smoke essay, due on 2027-04-15 (date only), estimated at 180 minutes.','en-US'],
-      ['�����������Ĳ�����ҵ������ֹ����Ϊ2027��4��16�գ�ֻ��¼���ڣ���Ԥ����ʱ30���ӡ�','zh-CN']]) {
+      ['创建任务“中文测试作业”，截止日期为2027年4月16日（只记录日期），预计用时30分钟。','zh-CN']]) {
       const requestId=randomUUID(),reply=await service.submit({requestId,text});
       assert.equal(reply.ok,true,reply.error?.code);assert.equal(reply.data.outcome,'applied');assert.equal(reply.data.language,language);
       const task=store.listTasks().find(t=>t.id===reply.data.changes[0].taskId);assert.equal(task.deadline.kind,'date');

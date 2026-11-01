@@ -39,3 +39,15 @@ test('decrypt failure is sanitized and does not delete stored ciphertext',async 
   await assert.rejects(f.vault.getCredential(),e=>e.code==='AI_CONFIG_ERROR'&&!e.message.includes('private'));
   assert.equal(await readFile(f.path,'utf8'),before);
 });
+
+test('key rotation re-encrypts and cannot race a queued removal',async t=>{
+  let rotating=false,release;const wait=new Promise(resolve=>release=resolve);
+  const f=await fixture(t,{
+    decryptStringAsync:async()=>({result:'private',shouldReEncrypt:true}),
+    encryptStringAsync:async()=>{if(rotating) await wait;return Buffer.from(rotating?'rotated':'original');}
+  });
+  await f.vault.configure({apiKey:'private'});rotating=true;
+  const credential=f.vault.getCredential(),remove=f.vault.configure({clearKey:true});release();
+  assert.equal((await credential).apiKey,'private');await remove;
+  assert.equal(await f.reopen().getCredential(),null);
+});

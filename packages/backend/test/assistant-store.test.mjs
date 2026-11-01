@@ -72,7 +72,7 @@ test('schema1 migration keeps existing task/settings rows and rejects future sch
   db.exec(`CREATE TABLE tasks(id TEXT PRIMARY KEY,title TEXT NOT NULL,notes TEXT NOT NULL,status TEXT NOT NULL,completedAt TEXT,priority TEXT NOT NULL,estimatedMinutes INTEGER,deadlineJson TEXT,createdAt TEXT NOT NULL,updatedAt TEXT NOT NULL,revision INTEGER NOT NULL) STRICT;
     CREATE TABLE settings(id INTEGER PRIMARY KEY,locale TEXT NOT NULL,timeZone TEXT NOT NULL,revision INTEGER NOT NULL) STRICT;
     INSERT INTO settings VALUES(1,'zh-CN','Asia/Shanghai',7);PRAGMA user_version=1;`);
-  const id=randomUUID();db.prepare('INSERT INTO tasks VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(id,'ԭ����','notes','completed','2026-01-01T00:00:00.000Z','high',30,null,'2025-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z',9);db.close();
+  const id=randomUUID();db.prepare('INSERT INTO tasks VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(id,'原任务','notes','completed','2026-01-01T00:00:00.000Z','high',30,null,'2025-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z',9);db.close();
   const s=f.open();assert.equal(typeof s.applyAssistantRun,'function');
   assert.equal(s.listTasks()[0].id,id);assert.equal(s.listTasks()[0].revision,9);assert.equal(s.listTasks()[0].completedAt,'2026-01-01T00:00:00.000Z');
   assert.deepEqual(s.getSettings(),{locale:'zh-CN',timeZone:'Asia/Shanghai',revision:7});
