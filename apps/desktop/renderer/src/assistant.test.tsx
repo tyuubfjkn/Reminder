@@ -1,11 +1,12 @@
 // REM-002-FE assistant UI tests. All assistant behavior here comes from the scripted TEST FIXTURE in
 // src/test/fakeAssistant.ts; these are mock tests, not evidence of the real service or DeepSeek.
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from './App';
 import type { Settings, Task } from './api/contract';
 import { createFakeApi, makeTask } from './test/fakeApi';
 import { createFakeAssistant, reply, withAssistant, type FakeAssistant } from './test/fakeAssistant';
+import { useAssistant } from './useAssistant';
 
 let ids = 0;
 beforeEach(() => {
@@ -443,5 +444,146 @@ describe('languages', () => {
     await send(user, '数学作业周五交', { message: '消息', send: '发送' });
     expect(await screen.findByRole('alert')).toHaveTextContent('DeepSeek 拒绝了此 API 密钥');
     expect(screen.getByRole('textbox', { name: '消息' })).toHaveValue('数学作业周五交');
+  });
+});
+
+describe('PR #7 review fixes', () => {
+  // P1: a structured answer whose response was lost must not let a stale choice answer an unseen later question.
+  it('keeps stale choices disabled after a lost answer response and only replays the identical answer', async () => {
+    const { fake, ai, user } = setup({ settings: { timeZone: 'America/New_York' } });
+    const q1 = { kind: 'occurrence' as const, earlier: '2027-11-07T05:30:00.000Z', later: '2027-11-07T06:30:00.000Z', timeZone: 'America/New_York' };
+    const q2 = { kind: 'occurrence' as const, earlier: '2028-11-05T05:15:00.000Z', later: '2028-11-05T06:15:00.000Z', timeZone: 'America/New_York' };
+    // Fixture models the service: answering question one advances to question two, but that response is lost.
+    ai.onSubmit(input => ({ ok: true, data: reply(input, { outcome: 'clarification', message: 'Question one: which 1:30?', choices: q1 }) }));
+    ai.onSubmit(() => 'reject');
+    ai.onSubmit(input => ({ ok: true, data: reply(input, { outcome: 'clarification', message: 'Question two: which 1:15?', choices: q2, replayed: true }) }));
+    ai.onSubmit(input => {
+      fake.externalCreate('Exam');
+      fake.externalCreate('Lab');
+      return { ok: true, data: reply(input, { message: 'Created 2 tasks.', undoAvailable: true }) };
+    });
+    await openAssistant(user);
+    await send(user, 'Exam 2027-11-07 1:30am and lab 2028-11-05 1:15am');
+    const one = (await within(conversation()).findByText('Question one: which 1:30?')).closest('li')!;
+    await user.click(within(one).getByRole('button', { name: /Second.*GMT-5/ }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Reminder couldn’t confirm the result.');
+    for (const button of within(one).getAllByRole('button')) expect(button).toBeDisabled();
+    await user.click(within(one).getByRole('button', { name: /First.*GMT-4/ }));
+    expect(ai.assistant.submit).toHaveBeenCalledTimes(2);
+
+    await user.click(within(alert).getByRole('button', { name: 'Try again' }));
+    const two = (await within(conversation()).findByText('Question two: which 1:15?')).closest('li')!;
+    for (const button of within(one).getAllByRole('button')) expect(button).toBeDisabled();
+    expect(fake.tasks).toHaveLength(0);
+    await user.click(within(two).getByRole('button', { name: /First.*GMT-4/ }));
+    await within(conversation()).findByText('Created 2 tasks.');
+
+    const calls = vi.mocked(ai.assistant.submit).mock.calls.map(c => c[0]);
+    expect(calls).toEqual([
+      { requestId: id(1), text: 'Exam 2027-11-07 1:30am and lab 2028-11-05 1:15am' },
+      { requestId: id(2), text: 'Second (GMT-5)', conversationId: 'conv-1', choice: { occurrence: 'later' } },
+      { requestId: id(2), text: 'Second (GMT-5)', conversationId: 'conv-1', choice: { occurrence: 'later' } },
+      { requestId: id(3), text: 'First (GMT-4)', conversationId: 'conv-1', choice: { occurrence: 'earlier' } }
+    ]);
+    expect(fake.tasks).toHaveLength(2);
+  });
+
+  it('disables the other stale choice in the UI after a failed answer', async () => {
+    const { ai, user } = setup();
+    ai.onSubmit(input => ({ ok: true, data: reply(input, { outcome: 'clarification', message: 'Which one?',
+      choices: { kind: 'task', tasks: [{ id: 'a', title: 'A', status: 'pending', deadline: null }, { id: 'b', title: 'B', status: 'pending', deadline: null }] } }) }));
+    ai.onSubmit(() => ({ ok: false, error: { code: 'AI_TIMEOUT' } }));
+    await openAssistant(user);
+    await send(user, 'Finish it');
+    const entry = (await within(conversation()).findByText('Which one?')).closest('li')!;
+    await user.click(within(entry).getByRole('button', { name: /^A ·/ }));
+    await screen.findByRole('alert');
+    expect(within(entry).getByRole('button', { name: /^B ·/ })).toBeDisabled();
+    expect(ai.assistant.submit).toHaveBeenCalledTimes(2);
+  });
+
+  it('refuses a new structured answer in the hook itself while a failed answer is unresolved', async () => {
+    const ai = createFakeAssistant({ hasKey: true });
+    ai.onSubmit(input => ({ ok: true, data: reply(input, { outcome: 'clarification', message: 'Which one?',
+      choices: { kind: 'task', tasks: [{ id: 'a', title: 'A', status: 'pending', deadline: null }, { id: 'b', title: 'B', status: 'pending', deadline: null }] } }) }));
+    ai.onSubmit(() => 'reject');
+    ai.onSubmit(input => ({ ok: true, data: reply(input, { outcome: 'clarification', message: 'Next question.' }) }));
+    const { result } = renderHook(() => useAssistant(ai.assistant, async () => true));
+    await act(() => result.current.send('Finish it'));
+    await act(() => result.current.answer('A', { taskId: 'a' }));
+    expect(result.current.pending?.phase).toBe('failed');
+    // A different (stale) choice must not go out under a new requestId.
+    await act(() => result.current.answer('B', { taskId: 'b' }));
+    expect(ai.assistant.submit).toHaveBeenCalledTimes(2);
+    // The identical retry is the only way forward.
+    await act(() => result.current.retry());
+    expect(vi.mocked(ai.assistant.submit).mock.calls.map(c => c[0])).toEqual([
+      { requestId: id(1), text: 'Finish it' },
+      { requestId: id(2), text: 'A', conversationId: 'conv-1', choice: { taskId: 'a' } },
+      { requestId: id(2), text: 'A', conversationId: 'conv-1', choice: { taskId: 'a' } }
+    ]);
+    expect(result.current.pending).toBeNull();
+  });
+
+  // P2: whitespace around a successful message must not leave it in the composer for a duplicate send.
+  it('clears whitespace-padded input after a successful send so it cannot be sent twice', async () => {
+    const { fake, ai, user } = setup();
+    ai.onSubmit(input => {
+      const task = fake.externalCreate('Math');
+      return { ok: true, data: reply(input, { message: 'Created 1 task.', changes: [{ kind: 'created', taskId: task.id, title: 'Math' }], undoAvailable: true }) };
+    });
+    await openAssistant(user);
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    await user.click(box);
+    await user.paste('  Add Math  ');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await within(conversation()).findByText('Created 1 task.');
+    expect(ai.assistant.submit).toHaveBeenCalledWith({ requestId: id(1), text: 'Add Math' });
+    expect(box).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    expect(ai.assistant.submit).toHaveBeenCalledTimes(1);
+    expect(fake.tasks).toHaveLength(1);
+  });
+
+  it('treats whitespace-only differences after a failure as the same request', async () => {
+    const { ai, user } = setup();
+    ai.onSubmit(() => 'reject');
+    ai.onSubmit(input => ({ ok: true, data: reply(input, { outcome: 'unsupported', message: 'OK.' }) }));
+    await openAssistant(user);
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    await user.click(box);
+    await user.paste('  Add Math');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await screen.findByRole('alert');
+    await user.type(box, '  ');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await within(conversation()).findByText('OK.');
+    expect(vi.mocked(ai.assistant.submit).mock.calls.map(c => c[0].requestId)).toEqual([id(1), id(1)]);
+    expect(box).toHaveValue('');
+  });
+
+  // Minor: removing the key gates new submissions only; history and local Undo stay usable.
+  it('keeps conversation history and Undo after the key is removed', async () => {
+    const { fake, ai, user } = setup();
+    ai.onSubmit(input => {
+      const task = fake.externalCreate('Vocabulary');
+      return { ok: true, data: reply(input, { message: 'Created 1 task.', changes: [{ kind: 'created', taskId: task.id, title: 'Vocabulary' }], undoAvailable: true }) };
+    });
+    ai.onUndo(input => ({ ok: true, data: reply(input, { outcome: 'undone', message: 'Undid 1 change.' }) }));
+    await openAssistant(user);
+    await send(user, 'Study vocabulary');
+    await within(conversation()).findByText('Created 1 task.');
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    await user.click(screen.getByRole('button', { name: 'Remove key' }));
+    await waitFor(() => expect(ai.config.hasKey).toBe(false));
+    await user.click(screen.getByRole('button', { name: 'Assistant' }));
+    expect(screen.getByText('Add your DeepSeek API key in Settings to use the assistant.')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Message' })).not.toBeInTheDocument();
+    const entry = within(conversation()).getByText('Created 1 task.').closest('li')!;
+    await user.click(within(entry).getByRole('button', { name: 'Undo these changes' }));
+    await within(conversation()).findByText('Undid 1 change.');
   });
 });

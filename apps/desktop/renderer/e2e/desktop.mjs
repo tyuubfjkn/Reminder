@@ -63,8 +63,27 @@ if (!hasAssistant) {
   await page.getByRole('button', { name: 'Tasks' }).click();
   log('REM-002 compat: bridge has no assistant -> Assistant hidden, manual UI unchanged');
 } else {
-  await page.getByRole('button', { name: 'Assistant' }).waitFor();
-  log('REM-002: bridge exposes assistant -> Assistant nav shown (no provider calls made by this script)');
+  // Real assistant IPC + DPAPI through the UI. Never submits, so no DeepSeek request is made.
+  await page.getByRole('button', { name: 'Assistant' }).click();
+  await page.getByText('Add your DeepSeek API key in Settings to use the assistant.').waitFor();
+  assert.equal(await page.getByRole('textbox', { name: 'Message' }).count(), 0, 'no composer without a key');
+  await page.getByRole('button', { name: 'Open Settings' }).click();
+  const ai = page.getByRole('region', { name: 'AI assistant (DeepSeek)' });
+  await ai.getByText('API key: not set').waitFor();
+  await ai.getByText('Model: deepseek-flash').waitFor();
+  // Placeholder, not a credential: it is only encrypted, stored and removed locally.
+  const placeholder = 'sk-e2e-placeholder-not-a-real-key';
+  await ai.getByLabel('DeepSeek API key').fill(placeholder);
+  await ai.getByRole('button', { name: 'Save key' }).click();
+  await ai.getByText('API key: saved').waitFor();
+  assert.equal(await ai.getByLabel('Replace API key').inputValue(), '', 'key field cleared after save');
+  assert.equal((await page.content()).includes(placeholder), false, 'key not rendered anywhere');
+  const config = await page.evaluate(() => window.reminder.assistant.getConfig());
+  assert.deepEqual(config, { ok: true, data: { provider: 'deepseek', model: 'deepseek-flash', hasKey: true } });
+  await ai.getByRole('button', { name: 'Remove key' }).click();
+  await ai.getByText('API key: not set').waitFor();
+  await page.getByRole('button', { name: 'Tasks' }).click();
+  log('REM-002: real assistant IPC + DPAPI via UI: no-key gate, placeholder key saved/cleared/removed, no submit');
 }
 
 // Fix a known timezone for deterministic evidence; it is independent of language.

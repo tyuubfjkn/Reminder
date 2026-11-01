@@ -27,8 +27,8 @@ All cards use baseline `9db390c6cd37276845375c9768c8f17c49af3fc5`, shared design
 | REM-002-BE-01 | Atomic changes, durable replay and whole-batch undo | Codex | Existing store | packages/backend/** | Implemented with real SQLite and schema migration tests |
 | REM-002-BE-02 | Bounded, sanitized DeepSeek protocol adapter | Codex | Shared contract | packages/backend/** | Fixture protocol/error/timeout tests pass; live key required for provider acceptance |
 | REM-002-BE-03 | Bilingual receipts, safe target/time clarification | Codex | BE-01/02 | packages/backend/** | Interleaved DST choices and stale task snapshots regression-tested |
-| REM-002-IPC | Encrypted local key and restricted assistant methods | Codex | BE-03 | apps/desktop/main/**, tools/**, backend tests | Actual Windows DPAPI/IPC probe; final CI tracked in verification record |
-| REM-002-FE | Assistant conversation, settings, clarification and undo | CC | Published d2ec9a8 planning contract; PR #8 backend | apps/desktop/renderer/** | PR #7 under independent review; no frontend acceptance yet |
+| REM-002-IPC | Encrypted local key and restricted assistant methods | Codex | BE-03 | apps/desktop/main/**, tools/**, backend tests | Passed actual DPAPI/vault restore and IPC/SQLite batch/restart/replay/undo, run 41287530839 at e7a04aaa; backend PR #8 |
+| REM-002-FE | Assistant conversation, settings, clarification and undo | CC | Published d2ec9a8 planning contract; PR #8 backend | apps/desktop/renderer/** | PR #7 head 7f92769 blocked on whitespace duplicate-send and stale-choice lost-response defects; review 5727069372; awaiting CC fix |
 | REM-002-INT | Complete natural-language task loop | Codex | Backend + reviewed CC head + configured key | tools/**, docs/**, .github/** | Draft #9 combines sources; fixture integration and live-provider evidence kept separate |
 
 Order remains REM-002 -> REM-003 -> REM-004 -> REM-005. Do not mark later capabilities implemented based on model prose. Reminder acceptance must explicitly distinguish running/background/closed/sleep conditions.
