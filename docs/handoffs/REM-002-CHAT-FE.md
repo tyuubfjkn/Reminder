@@ -44,3 +44,6 @@ DeepSeek can discuss ordinary topics, including learning/life, without turning e
 ## Final clarification binding requirement
 Each structured reply.choices also has reply.clarificationId. Always submit input.clarificationId from the exact displayed question with input.choice. Carry it unchanged through retries. Old cards cannot use the latest question's ID; stale clicks must conflict. Add regression coverage for two consecutive DST questions and task-choice-to-DST transitions.
 On a system settings revision change, the backend invalidates old proposals on the next submit. Clear/mark the preview stale locally, preserve the composer, and allow a fresh message without proposalId; old confirmations conflict. No need to send a synthetic confirmation to discover this.
+
+## First combined CI finding
+PR #10 Windows run41370375540: backend72 and existing renderer101 tests pass; renderer typecheck fails in src/test/fakeApi.ts at lines49,110,131 because Task fixtures omit required plannedAt. Update all fixtures/helpers as part of renderer contract adaptation; do not weaken the shared Task contract. Native checks now collect independent evidence even when typecheck fails; any such run remains failed and is not acceptance.

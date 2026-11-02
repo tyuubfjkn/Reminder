@@ -28,13 +28,15 @@ jobs:
       - name: Renderer tests
         working-directory: apps/desktop/renderer
         run: npm test
+      - name: Build renderer
+        id: renderer-build
+        working-directory: apps/desktop/renderer
+        run: npm run build
       - name: Typecheck
         working-directory: apps/desktop/renderer
         run: npm run typecheck
-      - name: Build renderer
-        working-directory: apps/desktop/renderer
-        run: npm run build
       - name: Diagnose installed Electron executable
+        if: ${{ !cancelled() && steps.renderer-build.outcome == 'success' }}
         shell: pwsh
         run: |
           @'
@@ -50,6 +52,9 @@ jobs:
           console.log({status:result.status,signal:result.signal,error:result.error?.message,stdout:result.stdout,stderr:result.stderr});
           '@ | node
       - name: Real Electron restart and persistence
+        # Collect independent native evidence even when a renderer typecheck fails.
+        # The typecheck still fails the job; no check is skipped or made optional.
+        if: ${{ !cancelled() && steps.renderer-build.outcome == 'success' }}
         shell: pwsh
         env:
           DEBUG: pw:browser
