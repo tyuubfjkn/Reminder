@@ -36,3 +36,15 @@ Order remains REM-002 -> REM-003 -> REM-004 -> REM-005. Do not mark later capabi
 All first-slice cards refer to docs/superpowers/specs/2026-10-31-reminder-design.md, packages/contracts/api-v1.d.ts, docs/api-v1.md, and docs/superpowers/plans/2026-10-31-rem-001.md. Frontend review is anchored to PR #2 head 7bea04129b8a8999868253b47cb55b2911c343fd. Source integration evidence is recorded in docs/verification/rem-001.md.
 
 Known follow-ups: read-only dispatcher null-parameter validation, native date-picker OS locale, and executable-boundary coverage for the root test runner's exit code (REM-001-INT-02). Real Electron serialization, frontend integration, isolated test profiles and actual backend ACL/disk-full checks now pass. Root dependency lock is committed in PR #4 and verified through its final npm ci gate. Packaging, installation/upgrade/uninstall and release validation remain future work. The REM-001 manual-task source loop is accepted; no installable release is claimed. Detailed hardening evidence: docs/verification/rem-001-hardening.md.
+
+## REM-002 conversational/UI revision (user-authorized)
+Baseline: main 5e0c14f. Canonical design v1.2.0; plan docs/superpowers/plans/2026-11-01-rem-002-chat.md.
+
+| ID | Owner | Scope | State |
+| --- | --- | --- | --- |
+| REM-002-CHAT-BE | Codex | Free conversation, proposal-bound confirmation/edit/cancel, planned time schema3 | Implemented on codex/rem-002-chat-confirm; 72 backend tests pass; independent review finding fixed with RED/GREEN |
+| REM-002-SYSTEM-TZ | Codex | System timezone startup/request/resume/poll synchronization and notification | Implemented and unit-tested; real Electron check pending CI |
+| REM-002-CHAT-FE | CC | Polished Today/tasks/chat/confirmation/Undo/settings, proposal and clarification IDs, system timezone | Handoff docs/handoffs/REM-002-CHAT-FE.md; not implemented in Codex branch |
+| REM-002-CHAT-INT | Codex | Combined native UI verification, screenshots and review/merge | Pending CC renderer; live DeepSeek remains a separate user-key gate |
+
+Do not merge this revision with the old renderer: it cannot bind proposal/clarification IDs and still exposes manual timezone settings. The previously accepted REM-002 implementation remains main until the new combined checks pass. Reminders, automatic scheduling and recurrence are still later slices.

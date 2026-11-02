@@ -12,8 +12,8 @@ const requireRenderer=createRequire(new URL('../apps/desktop/renderer/package.js
 const {_electron}=requireRenderer('playwright-core');
 const requireRoot=createRequire(new URL('../package.json',import.meta.url));
 const installFixture=(app,sentinel)=>app.evaluate((_electron,expected)=>{
-  globalThis.fetch=async(_url,init)=>{
-    if(init.headers.Authorization!=='Bearer '+expected) throw Error('Credential restoration failed');
+  globalThis.fetch=async(url,init)=>{
+    if(url!=='https://api.deepseek.com/chat/completions'||init.headers.Authorization!=='Bearer '+expected) throw Error('Unexpected fixture transport');
     return new Response(JSON.stringify({choices:[{finish_reason:'tool_calls',message:{tool_calls:[{
       type:'function',function:{name:'record_task_intent',arguments:JSON.stringify({outcome:'apply',language:'en-US',operations:[
         {kind:'create',input:{title:'Assistant fixture essay',deadline:{kind:'date',date:'2027-04-15'},estimatedMinutes:180}}
@@ -43,7 +43,10 @@ await withIsolatedProfile(async profile=>{
     // The real main coordinator, IPC, vault and SQLite perform all operations.
     await installFixture(app,sentinel);
     const request={requestId:randomUUID(),text:'Create an essay due on April 15, 2027, estimated at three hours.'};
-    const applied=await page.evaluate(input=>window.reminder.assistant.submit(input),request);
+    const proposal=await page.evaluate(input=>window.reminder.assistant.submit(input),request);
+    assert.equal(proposal.data.outcome,'proposal');assert.equal((await page.evaluate(()=>window.reminder.tasks.list())).data.length,0);
+    const confirmed={requestId:randomUUID(),text:'yes',conversationId:proposal.data.conversationId,proposalId:proposal.data.proposal.id,decision:'confirm'};
+    const applied=await page.evaluate(input=>window.reminder.assistant.submit(input),confirmed);
     assert.equal(applied.ok,true,applied.error?.code);assert.equal(applied.data.outcome,'applied');
     assert.equal((await page.evaluate(()=>window.reminder.tasks.list())).data[0].estimatedMinutes,180);
     await app.close();app=null;
@@ -51,20 +54,22 @@ await withIsolatedProfile(async profile=>{
     assert.equal((await page.evaluate(()=>window.reminder.assistant.getConfig())).data.hasKey,true);
     await installFixture(app,sentinel);
     // Replay must read the durable receipt without contacting the real provider after restart.
-    const replay=await page.evaluate(input=>window.reminder.assistant.submit(input),request);
+    const replay=await page.evaluate(input=>window.reminder.assistant.submit(input),confirmed);
     assert.equal(replay.data.replayed,true);assert.equal(replay.data.changes[0].taskId,applied.data.changes[0].taskId);
     assert.equal((await page.evaluate(()=>window.reminder.tasks.list())).data.length,1);
     // A fresh submit exercises production vault.getCredential after restart; the fixture checks its header without returning it.
     const freshId=randomUUID();
     const fresh=await page.evaluate(requestId=>window.reminder.assistant.submit({requestId,text:'Create another fixture essay'}),freshId);
     assert.equal(fresh.ok,true,fresh.error?.code);
-    assert.equal((await page.evaluate(requestId=>window.reminder.assistant.undo({requestId}),freshId)).data.outcome,'undone');
-    assert.equal((await page.evaluate(requestId=>window.reminder.assistant.undo({requestId}),request.requestId)).data.outcome,'undone');
+    assert.equal(fresh.data.outcome,'proposal');const freshConfirmId=randomUUID();
+    assert.equal((await page.evaluate(input=>window.reminder.assistant.submit(input),{requestId:freshConfirmId,text:'yes',conversationId:fresh.data.conversationId,proposalId:fresh.data.proposal.id,decision:'confirm'})).data.outcome,'applied');
+    assert.equal((await page.evaluate(requestId=>window.reminder.assistant.undo({requestId}),freshConfirmId)).data.outcome,'undone');
+    assert.equal((await page.evaluate(requestId=>window.reminder.assistant.undo({requestId}),confirmed.requestId)).data.outcome,'undone');
     assert.equal((await page.evaluate(()=>window.reminder.assistant.configure({clearKey:true}))).data.hasKey,false);
     const missing=await page.evaluate(requestId=>window.reminder.assistant.submit({requestId,text:'Add an essay'}),randomUUID());
     assert.equal(missing.error.code,'AI_NOT_CONFIGURED');
     assert.deepEqual((await page.evaluate(()=>window.reminder.tasks.list())).data,[]);
     assert.equal((await page.evaluate(()=>window.reminder.tasks.create({title:'Manual still works'}))).ok,true);
-    console.log('[assistant] Actual DPAPI, IPC, SQLite batch/restart/replay/undo, key removal and offline manual path passed; model response was a fixture, no live provider call.');
+    console.log('[assistant] Actual DPAPI, IPC, proposal/confirmation, SQLite batch/restart/replay/undo, key removal and offline manual path passed; model response was a fixture, no live provider call.');
   } finally {await app?.close();}
 });

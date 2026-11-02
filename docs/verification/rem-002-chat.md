@@ -1,0 +1,14 @@
+# REM-002 conversational revision verification
+
+Baseline main:5e0c14f73ae333110420126b29dd6b94ed7f71b8. Branch:codex/rem-002-chat-confirm. Scope: backend/main/contracts and Codex test tools, not CC renderer.
+
+- Baseline50/50 backend tests passed. Planned-time persistence/schema2 migration/old Undo regressions failed before implementation and pass afterward.
+- General chat, exact preview/confirmation, edits/cancel, stale/expired IDs, independent planned/deadline folds, durable confirmation replay/Undo and storage-failure retry are covered against the real service and SQLite with only provider proposals as fixtures.
+- System timezone tests cover adoption, revision changes, preserved instants/date-only values, invalid lookup fallback, desktop settings rejection of manual zones, resume/poll cleanup, stale proposal rejection and fresh-message recovery. Preload subscription test verifies raw event/payload is not exposed and unsubscribe works.
+- Independent whole-branch reviewer ran70/70 tests and reproduced stale clarification buttons selecting a later field. Added exact clarificationId to reply/input/fingerprint. New stale fresh-ID click and same-ID retry regression RED->GREEN; also fixed stale-zone recovery RED->GREEN. Final local suite72/72.
+- Local offline npm installs could not obtain uncached dependencies (ENOTCACHED). Windows CI will supply actual Electron/DPAPI validation. No personal profile, real key or Windows timezone was changed.
+- tools/assistant-probe.mjs now confirms proposals before batch/restart/replay/Undo. tools/assistant-conversation-probe.mjs checks real main/preload/IPC/DPAPI/SQLite chat, edit/confirm, notification and stale system-zone consent; provider HTTP and OS-zone observation are driver fixtures. Genuine Windows timezone changes while running are not yet manually verified.
+- Existing renderer and root assistant UI probe still assume automatic application and manual timezone selection. Combined desktop CI is expected to expose that dependency; do not skip the checks or report the new UI delivered. CC must implement the handoff and supply screenshots/behavioral evidence before combined acceptance.
+- tools/assistant-live-smoke.mjs is opt-in (four real model requests) and exercises bilingual proposals/confirmation, general chat and planned-time cancellation, replay/Undo/reopen. Live DeepSeek is NOT verified in this change.
+
+Decisions: preserve manual/assistant v1 markers with additive fields and requiresConfirmation flag; coordinate renderer before merge. Use a distinct plannedAt instant, not deadline; no reminder or automatic scheduling claim. Narrow bound yes/no is local authorization; all other text revokes old consent before provider work. These are implementation choices within the user's approved scope. No deferred minor findings from independent review.

@@ -11,8 +11,8 @@ function safely(operation) {
   }
 }
 function rowTask(row) {
-  const { deadlineJson, ...task } = row;
-  return {...task, deadline: deadlineJson === null ? null : JSON.parse(deadlineJson)};
+  const { deadlineJson, plannedAtJson, ...task } = row;
+  return {...task, deadline: deadlineJson === null ? null : JSON.parse(deadlineJson),plannedAt:plannedAtJson==null?null:JSON.parse(plannedAtJson)};
 }
 export function openStore(path, options = {}) {
   let db;
@@ -23,7 +23,7 @@ export function openStore(path, options = {}) {
     db.exec('BEGIN IMMEDIATE');
     try {
       const version = db.prepare('PRAGMA user_version').get().user_version;
-      if (version > 2) throw new AppError('STORAGE_ERROR');
+      if (version > 3) throw new AppError('STORAGE_ERROR');
       if (version === 0) {
         let zone = options.timeZone;
         if (zone === undefined) {
@@ -52,14 +52,15 @@ export function openStore(path, options = {}) {
       if (version < 2) db.exec(`CREATE TABLE assistant_runs (
         requestId TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, replyJson TEXT NOT NULL, inverseJson TEXT NOT NULL
       ) STRICT; PRAGMA user_version=2;`);
+      if (version < 3) db.exec('ALTER TABLE tasks ADD COLUMN plannedAtJson TEXT; PRAGMA user_version=3;');
       db.exec('COMMIT');
     } catch(error) { db.exec('ROLLBACK'); throw error; }
     db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL');
     const find = db.prepare('SELECT * FROM tasks WHERE id=?');
     const all = db.prepare('SELECT * FROM tasks ORDER BY createdAt ASC, id ASC');
-    const insert = db.prepare('INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+    const insert = db.prepare('INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
     const update = db.prepare(`UPDATE tasks SET title=?,notes=?,status=?,completedAt=?,
-      priority=?,estimatedMinutes=?,deadlineJson=?,updatedAt=?,revision=revision+1
+      priority=?,estimatedMinutes=?,deadlineJson=?,plannedAtJson=?,updatedAt=?,revision=revision+1
       WHERE id=? AND revision=?`);
     const prefs = db.prepare('SELECT locale,timeZone,revision FROM settings WHERE id=1');
     if (!prefs.get()) throw new AppError('STORAGE_ERROR');
@@ -75,15 +76,15 @@ export function openStore(path, options = {}) {
     });
     const create = fields => {
       const now=new Date().toISOString();
-      const task={id:randomUUID(),notes:'',priority:'normal',estimatedMinutes:null,deadline:null,
+      const task={id:randomUUID(),notes:'',priority:'normal',estimatedMinutes:null,deadline:null,plannedAt:null,
         ...fields,status:'pending',completedAt:null,createdAt:now,updatedAt:now,revision:1};
       insert.run(task.id,task.title,task.notes,task.status,task.completedAt,task.priority,
-        task.estimatedMinutes,task.deadline===null?null:JSON.stringify(task.deadline),now,now,1);
+        task.estimatedMinutes,task.deadline===null?null:JSON.stringify(task.deadline),now,now,1,task.plannedAt==null?null:JSON.stringify(task.plannedAt));
       return rowTask(find.get(task.id));
     };
     const write = (task, expectedRevision) => {
       if (update.run(task.title,task.notes,task.status,task.completedAt,task.priority,
-        task.estimatedMinutes,task.deadline===null?null:JSON.stringify(task.deadline),new Date().toISOString(),task.id,expectedRevision).changes!==1)
+        task.estimatedMinutes,task.deadline===null?null:JSON.stringify(task.deadline),task.plannedAt==null?null:JSON.stringify(task.plannedAt),new Date().toISOString(),task.id,expectedRevision).changes!==1)
         throw new AppError('CONFLICT');
       return rowTask(find.get(task.id));
     };
