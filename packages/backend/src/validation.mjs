@@ -44,7 +44,15 @@ function deadline(value) {
   }
   invalid('deadline');
 }
-const taskFields=['title','notes','priority','estimatedMinutes','deadline'];
+function plannedTime(value) {
+  if(value===null) return null;
+  try {
+    object(value,['at','timeZone'],'plannedAt');
+    const {at,timeZone:zone}=deadline({kind:'instant',...value});
+    return {at,timeZone:zone};
+  } catch { invalid('plannedAt'); }
+}
+const taskFields=['title','notes','priority','estimatedMinutes','deadline','plannedAt'];
 export function taskFieldsInput(input, patch = false) {
   object(input, patch ? [...taskFields,'status'] : taskFields);
   if (patch && !Object.keys(input).length) invalid('patch');
@@ -67,6 +75,7 @@ export function taskFieldsInput(input, patch = false) {
     result.estimatedMinutes=n;
   }
   if (Object.hasOwn(input,'deadline')) result.deadline=deadline(input.deadline);
+  if (Object.hasOwn(input,'plannedAt')) result.plannedAt=plannedTime(input.plannedAt);
   if (Object.hasOwn(input,'status')) {
     if (!['pending','completed'].includes(input.status)) invalid('status');
     result.status=input.status;

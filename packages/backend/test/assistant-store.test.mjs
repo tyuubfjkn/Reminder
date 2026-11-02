@@ -76,5 +76,5 @@ test('schema1 migration keeps existing task/settings rows and rejects future sch
   const s=f.open();assert.equal(typeof s.applyAssistantRun,'function');
   assert.equal(s.listTasks()[0].id,id);assert.equal(s.listTasks()[0].revision,9);assert.equal(s.listTasks()[0].completedAt,'2026-01-01T00:00:00.000Z');
   assert.deepEqual(s.getSettings(),{locale:'zh-CN',timeZone:'Asia/Shanghai',revision:7});
-  s.close();const check=new DatabaseSync(f.path);assert.equal(check.prepare('PRAGMA user_version').get().user_version,2);check.close();
+  s.close();const check=new DatabaseSync(f.path);assert.equal(check.prepare('PRAGMA user_version').get().user_version,3);check.close();
 });

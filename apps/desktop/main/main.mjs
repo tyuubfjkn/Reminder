@@ -1,8 +1,8 @@
-import { app, BrowserWindow, ipcMain, dialog, session, safeStorage } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, session, safeStorage, powerMonitor } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync, mkdirSync } from 'node:fs';
-import { createDispatcher } from '../../../packages/backend/src/dispatch.mjs';
+import { createSystemTimeZoneSync, createSystemDispatcher, watchSystemTimeZone } from './system-time-zone.mjs';
 import { registerIpc } from './ipc.mjs';
 import { configureUserData } from './profile.mjs';
 import { createAssistantVault } from './assistant-config.mjs';
@@ -10,7 +10,7 @@ import { createAssistantService } from '../../../packages/backend/src/assistant/
 import { createDeepSeekProvider } from '../../../packages/backend/src/assistant/provider.mjs';
 
 app.setName('Reminder');
-let window, store, dispose;
+let window, store, dispose, stopZoneWatch;
 let profileError = false;
 try { configureUserData(app, process.env.REMINDER_USER_DATA_DIR); }
 catch { profileError = true; }
@@ -28,6 +28,7 @@ if (profileError) {
   });
   app.on('window-all-closed', () => app.quit());
   app.on('before-quit', () => {
+    stopZoneWatch?.();
     dispose?.();
     store?.close();
   });
@@ -45,6 +46,10 @@ if (profileError) {
       const userData=app.getPath('userData');
       mkdirSync(userData,{recursive:true});
       store=openStore(join(userData,'reminder.sqlite'));
+      const zoneSync=createSystemTimeZoneSync({store,onChange:()=>{
+        if(window&&!window.isDestroyed())window.webContents.send('reminder:settings:changed');
+      }});
+      zoneSync.refresh();stopZoneWatch=watchSystemTimeZone(zoneSync,powerMonitor);
       session.defaultSession.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
       session.defaultSession.setPermissionCheckHandler(()=>false);
       window=new BrowserWindow({
@@ -57,14 +62,15 @@ if (profileError) {
       window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
       window.webContents.on('will-navigate',event=>event.preventDefault());
       window.webContents.on('will-attach-webview',event=>event.preventDefault());
-      const assistant=createAssistantService({store,
+      const assistant=createAssistantService({store,refreshSettings:()=>zoneSync.refresh(),
         vault:createAssistantVault(join(userData,'assistant-config.json'),safeStorage),
         provider:createDeepSeekProvider(),regionalLocale:app.getSystemLocale()});
-      dispose=registerIpc(ipcMain,createDispatcher(store),()=>window?.isDestroyed()?null:window?.webContents,pathToFileURL(renderer).href,assistant);
+      dispose=registerIpc(ipcMain,createSystemDispatcher(store,zoneSync),()=>window?.isDestroyed()?null:window?.webContents,pathToFileURL(renderer).href,assistant);
       await window.loadFile(renderer);
     } catch {
       dialog.showErrorBox('Reminder', 'Reminder could not open its local data or interface. Your data has not been reset. Close other instances and check storage access.');
       dispose?.();
+      stopZoneWatch?.();
       try { store?.close(); } catch {}
       app.exit(1);
     }

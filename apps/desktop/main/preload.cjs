@@ -15,6 +15,11 @@ contextBridge.exposeInMainWorld('reminder', {
   },
   settings:{
     get:()=>ipcRenderer.invoke('reminder:settings:get'),
-    update:input=>ipcRenderer.invoke('reminder:settings:update',input)
+    update:input=>ipcRenderer.invoke('reminder:settings:update',input),
+    onChanged:callback=>{
+      if(typeof callback!=='function')throw new TypeError('Expected callback');
+      const listener=()=>callback();ipcRenderer.on('reminder:settings:changed',listener);
+      return ()=>ipcRenderer.removeListener('reminder:settings:changed',listener);
+    }
   }
 });

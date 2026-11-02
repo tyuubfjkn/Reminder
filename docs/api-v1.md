@@ -74,3 +74,19 @@ VALIDATION_ERROR: invalid shape/value; NOT_FOUND: task missing; CONFLICT: stale 
 Node 24.16.0 or later within major 24. Run: node packages/backend/src/cli.mjs --db <absolute-path-to-test.sqlite>.
 Send one JSON object per line: {"method":"tasks.create","params":{"title":"数学作业"}}.
 Each line returns one Result JSON. settings.get/tasks.list may omit params. Invalid JSON gives VALIDATION_ERROR at request. EOF closes storage; next invocation with the same path reloads data. Use a disposable path for trials.
+
+## REM-002 conversational revision (assistant v1 additive, design v1.2.0)
+See canonical declarations and docs/handoffs/REM-002-CHAT-FE.md for exact shapes. `requiresConfirmation:true` identifies consent-first assistant behavior. New outcomes chat/proposal/cancelled never mutate tasks. Every AI mutation, even direct commands, yields an immutable 10-minute proposal before commit. Follow-ups must bind the displayed proposalId; buttons use decision=confirm/cancel; narrow standalone yes/no is interpreted locally. Other text revokes the old proposal before calling the provider. Its identical failed request can retry; a fresh decision cannot authorize the revoked proposal. Old/expired IDs conflict. Session idle expiry remains30min.
+
+Preview data contains normalized fields and prior values of changed fields. Confirmation uses its own requestId and validates the original task/settings snapshot in the atomic store; Undo targets that confirmation requestId. Same-ID retries/restart replay cannot duplicate effects. A transient storage failure can retry only the identical confirmation; a conflict requires a fresh proposal. Non-mutating reply caches are memory-only and bounded256, with at most50 sessions; task mutation receipts remain durable. Old v1 receipt fingerprints are preserved for migration replay.
+
+Task.plannedAt is nullable {at,timeZone}, separate from deadline. Schema3 adds this field and preserves schema1/2 rows and prior Undo receipts. Model input uses local date/time, resolved locally; plannedAt and deadline ambiguities are selected separately by operation/field. Dates and saved instants are not rewritten on system-zone changes.
+
+Desktop settings report timeZoneSource=system. Language remains editable; timezone changes in settings.update are rejected. Main refreshes system timezone on startup, before task/settings requests and assistant submit/confirmation, after provider waits, on resume, and every60sec. Changes increment the settings revision and emit a narrow settings.onChanged notification. Reload settings.get() on notification; no event payload is state. Keep the last valid zone on an invalid OS lookup. Stale proposals cannot commit after a timezone revision change.
+
+This branch requires the coordinated CC renderer update before merge/feature acceptance; the old renderer lacks proposal-ID binding and still exposes an obsolete timezone selector. New operations are deliberately never auto-applied for compatibility.
+
+### Clarification identity (review fix)
+Structured task/DST questions include reply.clarificationId. Send that exact ID with input.choice; it binds the displayed question, even across successive fields of one task. A stale fresh-ID click conflicts; an identical request retry returns the original question/result. Include clarificationId in the renderer pending request and never replace it with the newest question while retrying. Existing committed v1 receipts remain replayable using their original request shapes.
+
+When a settings revision changes, pending proposals are invalidated on the next submit. The renderer can clear its stale preview and send fresh text without proposalId; confirming the old ID conflicts. This also prevents an expired/stale preview trapping ordinary conversation.

@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
+import {EventEmitter} from 'node:events';
 import {openStore} from '../src/store.mjs';
 import {createDispatcher} from '../src/dispatch.mjs';
 import {registerIpc} from '../../../apps/desktop/main/ipc.mjs';
@@ -25,7 +26,7 @@ test('preload permits exactly the v1 API and routes it to real storage', async (
     assert.equal(api.apiVersion,'1.0.0');
     assert.deepEqual(Object.keys(api).sort(),['apiVersion','assistant','settings','tasks']);
     assert.deepEqual(Object.keys(api.tasks).sort(),['create','list','update']);
-    assert.deepEqual(Object.keys(api.settings).sort(),['get','update']);
+    assert.deepEqual(Object.keys(api.settings).sort(),['get','onChanged','update']);
     assert.equal(channels.size,5);
     const created=await api.tasks.create({title:'桥接 task'});
     assert.equal(created.ok,true);
@@ -35,6 +36,17 @@ test('preload permits exactly the v1 API and routes it to real storage', async (
     assert.equal((await api.settings.update({expectedRevision:1,patch:{locale:'zh-CN'}})).data.locale,'zh-CN');
   } finally {dispose();store.close();}
   assert.equal(channels.size,0);
+});
+
+test('settings subscription exposes no IPC event/payload and unsubscribes independently',()=>{
+  const emitter=new EventEmitter();let api;
+  vm.runInNewContext(readFileSync(new URL('../../../apps/desktop/main/preload.cjs',import.meta.url),'utf8'),{
+    require:()=>({contextBridge:{exposeInMainWorld:(_key,value)=>{api=value;}},ipcRenderer:emitter})
+  });
+  let calls=0;const stop=api.settings.onChanged((...args)=>{calls++;assert.deepEqual(args,[]);});
+  emitter.emit('reminder:settings:changed',{sender:'private event'},{untrusted:'payload'});assert.equal(calls,1);
+  stop();emitter.emit('reminder:settings:changed');assert.equal(calls,1);assert.equal(emitter.listenerCount('reminder:settings:changed'),0);
+  assert.throws(()=>api.settings.onChanged(null));
 });
 
 test('assistant IPC uses the same sender restrictions and structured clone boundary', async () => {
